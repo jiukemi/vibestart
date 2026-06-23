@@ -1,29 +1,18 @@
-import { useEffect, useState } from "react";
-import { Moon, Sun } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { WizardLayout } from "@/components/layout/WizardLayout";
+import { WizardStepRenderer } from "@/components/wizard/WizardStepRenderer";
+import { useTheme } from "@/hooks/useTheme";
+import { WIZARD_STEPS } from "@/lib/steps";
+import { useWizardStore } from "@/stores/wizardStore";
 
 function App() {
-  const [isDark, setIsDark] = useState(() =>
-    document.documentElement.classList.contains("dark"),
-  );
-
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", isDark);
-  }, [isDark]);
+  const { isDark, toggle } = useTheme();
+  const currentStep = useWizardStore((s) => s.currentStep);
+  const step = WIZARD_STEPS[currentStep];
 
   return (
-    <main className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-8 text-foreground">
-      <h1 className="text-4xl font-semibold tracking-tight">VibeStart</h1>
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-        onClick={() => setIsDark((prev) => !prev)}
-      >
-        {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
-      </Button>
-    </main>
+    <WizardLayout isDark={isDark} onToggleTheme={toggle}>
+      <WizardStepRenderer stepId={step.id} />
+    </WizardLayout>
   );
 }
 
