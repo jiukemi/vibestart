@@ -1,0 +1,8 @@
+{
+  "id": "personal-profile",
+  "title": "在线个人简介",
+  "description": "做一个能分享给朋友的名片式主页",
+  "difficulty": 1,
+  "estimatedMinutes": 15,
+  "tags": ["静态页", "入门"]
+}

@@ -55,6 +55,26 @@ fn init_project(app: AppHandle, pack_id: String, target_dir: String) -> Result<(
     project::init_project(&app, &pack_id, &target_dir)
 }
 
+#[tauri::command]
+fn default_project_dir() -> String {
+    project::default_project_dir()
+}
+
+#[tauri::command]
+fn open_in_cursor(project_dir: String) -> Result<(), String> {
+    project::open_in_cursor(&project_dir)
+}
+
+#[tauri::command]
+fn open_local_preview(project_dir: String) -> Result<(), String> {
+    project::open_local_preview(&project_dir)
+}
+
+#[tauri::command]
+fn vercel_login() -> Result<String, String> {
+    project::vercel_login()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -70,6 +90,10 @@ pub fn run() {
             deploy_vercel,
             deploy_github_pages,
             init_project,
+            default_project_dir,
+            open_in_cursor,
+            open_local_preview,
+            vercel_login,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

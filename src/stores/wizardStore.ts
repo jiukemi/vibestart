@@ -10,6 +10,8 @@ export interface WizardSelections {
   deployTarget: string | null;
   projectDir: string | null;
   githubUsername: string | null;
+  githubRepoName: string | null;
+  deployUrl: string | null;
 }
 
 interface WizardState {
@@ -24,15 +26,18 @@ interface WizardState {
     key: K,
     value: WizardSelections[K],
   ) => void;
+  resetForNewProject: () => void;
 }
 
 const defaultSelections: WizardSelections = {
   primaryIde: null,
   llmProvider: "deepseek",
   packId: null,
-  deployTarget: null,
+  deployTarget: "vercel",
   projectDir: null,
   githubUsername: null,
+  githubRepoName: null,
+  deployUrl: null,
 };
 
 export const useWizardStore = create<WizardState>()(
@@ -73,6 +78,19 @@ export const useWizardStore = create<WizardState>()(
         set((state) => ({
           selections: { ...state.selections, [key]: value },
         }));
+      },
+
+      resetForNewProject: () => {
+        set({
+          currentStep: WIZARD_STEPS.findIndex((s) => s.id === "first-project"),
+          selections: {
+            ...get().selections,
+            packId: null,
+            deployTarget: "vercel",
+            projectDir: null,
+            deployUrl: null,
+          },
+        });
       },
     }),
     {

@@ -1,0 +1,8 @@
+{
+  "id": "web-effect",
+  "title": "网页小特效",
+  "description": "用粒子或渐变背景做一个视觉冲击力强的互动页面",
+  "difficulty": 2,
+  "estimatedMinutes": 18,
+  "tags": ["特效", "Canvas"]
+}

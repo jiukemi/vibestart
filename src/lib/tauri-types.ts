@@ -19,3 +19,9 @@ export interface SshKeyInfo {
   public_key: string | null;
   key_path: string;
 }
+
+export interface DeployResult {
+  success: boolean;
+  url: string | null;
+  log: string;
+}

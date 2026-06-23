@@ -1,0 +1,8 @@
+{
+  "id": "landing-page",
+  "title": "产品落地页",
+  "description": "做一个带 Hero、功能介绍和行动按钮的产品展示页",
+  "difficulty": 2,
+  "estimatedMinutes": 20,
+  "tags": ["落地页", "营销"]
+}

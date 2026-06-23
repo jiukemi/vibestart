@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>个人简介 · 预览</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+      padding: 24px;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(12px);
+      border-radius: 24px;
+      padding: 48px 40px;
+      max-width: 420px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+      animation: fadeUp 0.8s ease-out;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .avatar {
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      margin: 0 auto 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      color: white;
+      font-weight: 700;
+      box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+    }
+    h1 { font-size: 1.75rem; color: #1a1a2e; margin-bottom: 8px; }
+    .tagline {
+      color: #64748b;
+      font-size: 1rem;
+      min-height: 1.5em;
+      margin-bottom: 28px;
+    }
+    .tagline::after {
+      content: "|";
+      animation: blink 0.8s step-end infinite;
+      margin-left: 2px;
+      color: #667eea;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+    .links { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .links a {
+      padding: 10px 20px;
+      border-radius: 999px;
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 600;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .links a:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.15); }
+    .links a:nth-child(1) { background: #1a1a2e; color: white; }
+    .links a:nth-child(2) { background: #667eea; color: white; }
+    .links a:nth-child(3) { background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="avatar">V</div>
+    <h1>小 V</h1>
+    <p class="tagline" id="typed"></p>
+    <div class="links">
+      <a href="#">GitHub</a>
+      <a href="#">邮箱</a>
+      <a href="#">博客</a>
+    </div>
+  </div>
+  <script>
+    const text = "用 Vibe Coding 做有趣的东西 ✨";
+    const el = document.getElementById("typed");
+    let i = 0;
+    function type() {
+      if (i <= text.length) {
+        el.textContent = text.slice(0, i);
+        i++;
+        setTimeout(type, 80);
+      }
+    }
+    type();
+  </script>
+</body>
+</html>

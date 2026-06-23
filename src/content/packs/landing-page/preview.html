@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VibeFlow · 预览</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; color: #e2e8f0; background: #0f172a; }
+    nav {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 16px 32px;
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      position: sticky; top: 0; z-index: 10;
+    }
+    nav .logo { font-weight: 800; font-size: 1.25rem; background: linear-gradient(90deg, #818cf8, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    nav a { color: #94a3b8; text-decoration: none; font-size: 0.875rem; margin-left: 24px; }
+    .hero {
+      text-align: center;
+      padding: 80px 24px 100px;
+      background: radial-gradient(ellipse at 50% 0%, rgba(99,102,241,0.3) 0%, transparent 60%),
+                  linear-gradient(180deg, #1e1b4b 0%, #0f172a 100%);
+      animation: heroFloat 6s ease-in-out infinite alternate;
+    }
+    @keyframes heroFloat { from { background-position: 0% 0%; } to { background-position: 100% 0%; } }
+    .hero h1 { font-size: clamp(2.5rem, 6vw, 4rem); font-weight: 800; letter-spacing: -0.02em; margin-bottom: 16px; }
+    .hero p { font-size: 1.25rem; color: #94a3b8; max-width: 520px; margin: 0 auto 32px; }
+    .cta {
+      display: inline-block;
+      padding: 14px 32px;
+      background: linear-gradient(135deg, #6366f1, #a855f7);
+      color: white; text-decoration: none; border-radius: 12px;
+      font-weight: 600; font-size: 1rem;
+      box-shadow: 0 8px 32px rgba(99, 102, 241, 0.4);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .cta:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(99, 102, 241, 0.5); }
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 24px;
+      max-width: 960px;
+      margin: -40px auto 0;
+      padding: 0 24px 80px;
+    }
+    .feature {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 28px;
+      transition: transform 0.3s, border-color 0.3s;
+    }
+    .feature:hover { transform: translateY(-6px); border-color: rgba(129, 140, 248, 0.4); }
+    .feature .icon { font-size: 2rem; margin-bottom: 12px; }
+    .feature h3 { font-size: 1.125rem; margin-bottom: 8px; color: #f1f5f9; }
+    .feature p { font-size: 0.875rem; color: #94a3b8; line-height: 1.6; }
+    footer { text-align: center; padding: 32px; color: #64748b; font-size: 0.875rem; border-top: 1px solid rgba(255,255,255,0.06); }
+  </style>
+</head>
+<body>
+  <nav>
+    <span class="logo">VibeFlow</span>
+    <div>
+      <a href="#features">功能</a>
+      <a href="#">定价</a>
+      <a href="#">文档</a>
+    </div>
+  </nav>
+  <section class="hero">
+    <h1>让创意 10 分钟上线</h1>
+    <p>AI 驱动的快速建站工具，从想法到部署，全程 Vibe Coding。</p>
+    <a class="cta" href="#">免费开始</a>
+  </section>
+  <section class="features" id="features">
+    <div class="feature">
+      <div class="icon">⚡</div>
+      <h3>快速启动</h3>
+      <p>选一个模板，跟着 AI 提示一步步完成，零基础也能上手。</p>
+    </div>
+    <div class="feature">
+      <div class="icon">🤖</div>
+      <h3>AI 辅助</h3>
+      <p>在 Cursor 里粘贴提示词，让大模型帮你写代码、改样式。</p>
+    </div>
+    <div class="feature">
+      <div class="icon">🚀</div>
+      <h3>一键部署</h3>
+      <p>完成后直接发布到 Vercel 或 GitHub Pages，分享你的作品。</p>
+    </div>
+  </section>
+  <footer>© 2026 VibeFlow · 预览示例</footer>
+</body>
+</html>
