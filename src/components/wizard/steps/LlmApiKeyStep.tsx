@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -9,6 +9,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { StepShell } from "@/components/wizard/StepShell";
+import { useTauriCommand } from "@/hooks/useTauriCommand";
+import type { LlmConfig } from "@/lib/tauri-types";
 import { useWizardStore } from "@/stores/wizardStore";
 import { WIZARD_STEPS } from "@/lib/steps";
 import { cn } from "@/lib/utils";
@@ -44,10 +46,6 @@ const LLM_PROVIDERS = [
   },
 ] as const;
 
-function storageKey(provider: string) {
-  return `vibestart-llm-api-key-${provider}`;
-}
-
 export function LlmApiKeyStep() {
   const llmProvider = useWizardStore((s) => s.selections.llmProvider);
   const setSelection = useWizardStore((s) => s.setSelection);
@@ -55,27 +53,52 @@ export function LlmApiKeyStep() {
 
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [validated, setValidated] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  const configCommand = useTauriCommand<LlmConfig | null>();
+  const testCommand = useTauriCommand<string>();
+
+  const loadStoredKey = useCallback(async () => {
+    try {
+      const config = await configCommand.run("get_llm_config");
+      if (config && config.provider === selected) {
+        setApiKey(config.api_key);
+        setValidated(true);
+        setStatusMessage("已从本地配置加载已验证的 Key");
+      } else {
+        setApiKey("");
+        setValidated(false);
+        setStatusMessage(null);
+      }
+    } catch {
+      setApiKey("");
+      setValidated(false);
+      setStatusMessage(null);
+    }
+  }, [configCommand, selected]);
 
   useEffect(() => {
-    const stored = localStorage.getItem(storageKey(selected));
-    setApiKey(stored ?? "");
-    setSaved(!!stored);
-  }, [selected]);
+    void loadStoredKey();
+  }, [loadStoredKey]);
 
-  const saveKey = () => {
-    if (apiKey.trim()) {
-      localStorage.setItem(storageKey(selected), apiKey.trim());
-      setSaved(true);
-    }
+  const testAndSave = async () => {
+    setStatusMessage(null);
+    const result = await testCommand.run("test_llm_api", {
+      provider: selected,
+      apiKey: apiKey.trim(),
+    });
+    setValidated(true);
+    setStatusMessage(result ?? "API Key 验证成功");
   };
 
   return (
     <StepShell
       title={step.title}
       description={step.description}
-      onNext={saveKey}
-      nextDisabled={!apiKey.trim()}
+      onNext={testAndSave}
+      nextDisabled={!apiKey.trim() || testCommand.loading}
+      nextLabel={testCommand.loading ? "验证中…" : "验证并继续"}
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {LLM_PROVIDERS.map((provider) => {
@@ -84,7 +107,11 @@ export function LlmApiKeyStep() {
             <button
               key={provider.id}
               type="button"
-              onClick={() => setSelection("llmProvider", provider.id)}
+              onClick={() => {
+                setSelection("llmProvider", provider.id);
+                setValidated(false);
+                setStatusMessage(null);
+              }}
               className="text-left"
             >
               <Card
@@ -125,7 +152,8 @@ export function LlmApiKeyStep() {
             value={apiKey}
             onChange={(e) => {
               setApiKey(e.target.value);
-              setSaved(false);
+              setValidated(false);
+              setStatusMessage(null);
             }}
             placeholder="sk-..."
             className="flex h-9 w-full rounded-lg border border-input bg-background px-3 pr-10 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -145,10 +173,30 @@ export function LlmApiKeyStep() {
             )}
           </Button>
         </div>
-        {saved && (
-          <p className="text-xs text-muted-foreground">
-            ✅ 已保存到本地（连接测试将在后续步骤提供）
-          </p>
+
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!apiKey.trim() || testCommand.loading}
+            onClick={() => void testAndSave()}
+          >
+            {testCommand.loading && (
+              <Loader2 className="size-3.5 animate-spin" />
+            )}
+            测试连接
+          </Button>
+          {validated && !testCommand.error && (
+            <span className="text-xs text-muted-foreground">✅ 已验证</span>
+          )}
+        </div>
+
+        {statusMessage && !testCommand.error && (
+          <p className="text-xs text-muted-foreground">{statusMessage}</p>
+        )}
+        {testCommand.error && (
+          <p className="text-xs text-destructive">{testCommand.error}</p>
         )}
       </div>
     </StepShell>

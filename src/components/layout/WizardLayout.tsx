@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight, Moon, Sun } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { TroubleshootPanel } from "@/components/layout/TroubleshootPanel";
 import { StepNav } from "@/components/wizard/StepNav";
 import { cn } from "@/lib/utils";
 
@@ -69,13 +70,8 @@ export function WizardLayout({
                 )}
               </Button>
               {troubleshootOpen && (
-                <div className="flex-1 overflow-y-auto px-4 pb-4">
-                  <h3 className="text-sm font-medium text-foreground">
-                    故障排查
-                  </h3>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    遇到问题？此面板将提供常见问题的解决方案。（即将推出）
-                  </p>
+                <div className="flex min-h-0 flex-1 flex-col px-3 pb-4">
+                  <TroubleshootPanel />
                 </div>
               )}
             </div>

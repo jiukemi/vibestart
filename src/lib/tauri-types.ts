@@ -25,3 +25,9 @@ export interface DeployResult {
   url: string | null;
   log: string;
 }
+
+export interface LlmConfig {
+  provider: string;
+  api_key: string;
+  base_url?: string | null;
+}

@@ -1,5 +1,6 @@
 mod deploy;
 mod env_scan;
+mod llm;
 mod os;
 mod project;
 mod ssh;
@@ -75,6 +76,25 @@ fn vercel_login() -> Result<String, String> {
     project::vercel_login()
 }
 
+#[tauri::command]
+async fn test_llm_api(
+    provider: String,
+    api_key: String,
+    base_url: Option<String>,
+) -> Result<String, String> {
+    llm::test_api(
+        &provider,
+        &api_key,
+        base_url.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+fn get_llm_config() -> Option<llm::LlmConfig> {
+    llm::get_llm_config()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -94,6 +114,8 @@ pub fn run() {
             open_in_cursor,
             open_local_preview,
             vercel_login,
+            test_llm_api,
+            get_llm_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
