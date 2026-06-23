@@ -2,9 +2,86 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
-    "opener:default"
+    "opener:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "git",
+          "cmd": "git",
+          "args": true
+        },
+        {
+          "name": "node",
+          "cmd": "node",
+          "args": true
+        },
+        {
+          "name": "npm",
+          "cmd": "npm",
+          "args": true
+        },
+        {
+          "name": "npx",
+          "cmd": "npx",
+          "args": true
+        },
+        {
+          "name": "ssh",
+          "cmd": "ssh",
+          "args": true
+        },
+        {
+          "name": "ssh-keygen",
+          "cmd": "ssh-keygen",
+          "args": true
+        },
+        {
+          "name": "vercel",
+          "cmd": "vercel",
+          "args": true
+        },
+        {
+          "name": "brew",
+          "cmd": "brew",
+          "args": true
+        },
+        {
+          "name": "winget",
+          "cmd": "winget",
+          "args": true
+        },
+        {
+          "name": "cursor",
+          "cmd": "cursor",
+          "args": true
+        },
+        {
+          "name": "open",
+          "cmd": "open",
+          "args": true
+        },
+        {
+          "name": "cmd",
+          "cmd": "cmd",
+          "args": true
+        },
+        {
+          "name": "where",
+          "cmd": "where",
+          "args": true
+        },
+        {
+          "name": "which",
+          "cmd": "which",
+          "args": true
+        }
+      ]
+    }
   ]
 }
