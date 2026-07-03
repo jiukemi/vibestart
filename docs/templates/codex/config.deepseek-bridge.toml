@@ -1,0 +1,16 @@
+# DeepSeek 轻量桥模式 · 由 VibeStart 生成
+# 使用前请确保本地 bridge 已启动（默认 http://127.0.0.1:8098）
+# 端口以实际 bridge 文档为准
+
+model = "deepseek-v4-pro"
+model_provider = "deepseek"
+
+[model_providers.deepseek]
+name = "DeepSeek via VibeStart Bridge"
+base_url = "http://127.0.0.1:8098/v1"
+wire_api = "responses"
+requires_openai_auth = false
+supports_websockets = false
+env_key = "OPENAI_API_KEY"
+
+developer_instructions = "请用简体中文与用户交流。除非用户要求英文，否则解释、计划、总结均使用中文。"

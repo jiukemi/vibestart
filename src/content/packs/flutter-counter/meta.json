@@ -1,0 +1,16 @@
+{
+  "id": "flutter-counter",
+  "title": "App · Flutter 计数器",
+  "description": "Flutter 混合开发骨架，做出带按钮的计数器 App",
+  "difficulty": 2,
+  "estimatedMinutes": 30,
+  "tags": ["Flutter", "混合开发"],
+  "platforms": ["app"],
+  "appStacks": ["hybrid"],
+  "scaffoldKind": "flutter",
+  "hasBackendTutorial": true,
+  "kickoffHint": "scaffold 含 pubspec.yaml 与 lib/main.dart 起点。用 AI 编辑器打开项目文件夹，运行 flutter pub get && flutter run（或 IDE 运行）。",
+  "goalDescription": "Material 风格计数器：大号数字、+ / − 按钮、重置。",
+  "previewHint": "下方为网页模拟的 App 界面；真机/模拟器请用 flutter run。",
+  "starterPrompt": "这是 Flutter 计数器项目。请修改 lib/main.dart：MaterialApp 首页为 CounterPage，StatefulWidget 管理 count 整数，屏幕居中显示数字，下方 Row 三个 ElevatedButton：减一、加一、重置。主题色用 Colors.teal。注释中文，保持单文件即可。"
+}

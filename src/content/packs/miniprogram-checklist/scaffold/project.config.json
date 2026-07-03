@@ -1,0 +1,13 @@
+{
+  "description": "微信小程序待办清单入门",
+  "packOptions": { "ignore": [] },
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "minified": true
+  },
+  "compileType": "miniprogram",
+  "appid": "touristappid",
+  "projectname": "vibe-miniprogram-todo",
+  "libVersion": "3.0.0"
+}

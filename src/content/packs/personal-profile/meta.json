@@ -4,5 +4,11 @@
   "description": "做一个能分享给朋友的名片式主页",
   "difficulty": 1,
   "estimatedMinutes": 15,
-  "tags": ["静态页", "入门"]
+  "tags": ["静态页", "入门"],
+  "platforms": ["website", "explore"],
+  "scaffoldKind": "html",
+  "hasBackendTutorial": true,
+  "kickoffHint": "上方预览是「目标效果」——你的 index.html 几乎是空的。跟着下面 4 步提示词，用 AI 从零做出来。",
+  "goalDescription": "一张可分享的个人名片页：头像、名字、一句话介绍、社交链接。",
+  "starterPrompt": "我要做一个个人简介网页：顶部头像、名字、一句话介绍、三个社交链接按钮。请直接修改项目里的 index.html，使用纯 HTML + CSS，不要框架。先从页面结构开始。"
 }

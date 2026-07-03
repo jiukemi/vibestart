@@ -1,0 +1,15 @@
+{
+  "id": "miniprogram-checklist",
+  "title": "小程序 · 待办清单",
+  "description": "微信小程序骨架 + 分步提示词，做出可添加/完成的待办",
+  "difficulty": 2,
+  "estimatedMinutes": 25,
+  "tags": ["小程序", "WXML"],
+  "platforms": ["miniprogram"],
+  "scaffoldKind": "miniprogram",
+  "hasBackendTutorial": true,
+  "kickoffHint": "预览是目标 UI 参考。scaffold 已含 app.json / pages 空壳，用微信开发者工具导入项目目录，跟着提示词让 AI 写 WXML 与 JS。",
+  "goalDescription": "一个可添加、勾选、删除的待办清单小程序页面。",
+  "previewHint": "下方为网页模拟的小程序界面，实际请在微信开发者工具中预览。",
+  "starterPrompt": "这是一个微信小程序待办清单项目。请阅读 pages/index 下的 index.wxml、index.js、index.wxss，帮我实现：顶部标题、输入框+添加按钮、待办列表（每项可勾选完成和删除）。数据先存在 Page 的 data.todos 数组里。不要改 app.json 的 pages 配置。注释用中文。"
+}

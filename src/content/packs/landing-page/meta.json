@@ -4,5 +4,11 @@
   "description": "做一个带 Hero、功能介绍和行动按钮的产品展示页",
   "difficulty": 2,
   "estimatedMinutes": 20,
-  "tags": ["落地页", "营销"]
+  "tags": ["落地页", "营销"],
+  "platforms": ["website", "explore"],
+  "scaffoldKind": "html",
+  "hasBackendTutorial": true,
+  "kickoffHint": "预览展示的是成品参考，不是让你复制代码。你的 index.html 是空白起点——按 4 步提示词让 AI 帮你搭。",
+  "goalDescription": "一个产品落地页：Hero 标题区、功能亮点、行动按钮（CTA）。",
+  "starterPrompt": "我要做一个产品落地页：顶部 Hero（大标题 + 副标题 + 按钮）、中间功能介绍区块、底部行动号召。请修改 index.html，纯 HTML + CSS，先搭整体结构。"
 }

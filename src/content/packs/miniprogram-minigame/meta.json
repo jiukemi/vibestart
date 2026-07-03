@@ -1,0 +1,15 @@
+{
+  "id": "miniprogram-minigame",
+  "title": "微信小游戏 · 点击得分",
+  "description": "微信小游戏骨架（Canvas）+ 分步提示词，做出点击加分的简易游戏",
+  "difficulty": 2,
+  "estimatedMinutes": 30,
+  "tags": ["小游戏", "Canvas"],
+  "platforms": ["miniprogram"],
+  "scaffoldKind": "minigame",
+  "hasBackendTutorial": true,
+  "kickoffHint": "预览是目标玩法参考。scaffold 为小游戏工程（compileType: game），用微信开发者工具导入项目目录，选择「小游戏」模式预览，跟着提示词让 AI 写 Canvas 与触摸逻辑。",
+  "goalDescription": "全屏 Canvas 上有一个可点击目标，每点一次得分 +1，顶部显示分数。",
+  "previewHint": "下方为网页模拟的小游戏界面，实际请在微信开发者工具「小游戏」预览。",
+  "starterPrompt": "这是一个微信小游戏项目（compileType 为 game）。请阅读 game.js、js/main.js，用 wx.createCanvas() 创建画布，实现：顶部显示「得分：0」，屏幕中央绘制一个圆形按钮区域，触摸/点击时 score+1 并重绘。逻辑写在 js/main.js，不要引入第三方引擎。注释用中文。"
+}

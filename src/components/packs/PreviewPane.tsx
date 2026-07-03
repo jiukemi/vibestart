@@ -1,4 +1,4 @@
-import { getPreviewUrl } from "@/lib/packs";
+import { getPackMeta, getPreviewUrl } from "@/lib/packs";
 import { cn } from "@/lib/utils";
 
 interface PreviewPaneProps {
@@ -8,6 +8,8 @@ interface PreviewPaneProps {
 
 export function PreviewPane({ packId, className }: PreviewPaneProps) {
   const previewUrl = packId ? getPreviewUrl(packId) : null;
+  const packMeta = packId ? getPackMeta(packId) : null;
+  const isHtml = (packMeta?.scaffoldKind ?? "html") === "html";
 
   return (
     <div
@@ -16,9 +18,13 @@ export function PreviewPane({ packId, className }: PreviewPaneProps) {
         className,
       )}
     >
-      <div className="border-b border-border bg-muted/50 px-3 py-2">
-        <p className="text-xs font-medium text-muted-foreground">
-          效果预览（只读参考，请勿直接复制代码）
+      <div className="border-b border-border bg-muted/50 px-3 py-2 dark:bg-muted/30">
+        <p className="text-xs font-medium text-foreground">目标效果预览</p>
+        <p className="text-xs text-muted-foreground">
+          {packMeta?.previewHint ??
+            (isHtml
+              ? "这是成品参考，不是让你复制——你的 index.html 从空白开始，用下方提示词让 AI 做出来"
+              : "这是界面参考；真实运行请在对应开发工具中预览")}
         </p>
       </div>
       {previewUrl ? (

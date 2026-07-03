@@ -4,5 +4,11 @@
   "description": "用粒子或渐变背景做一个视觉冲击力强的互动页面",
   "difficulty": 2,
   "estimatedMinutes": 18,
-  "tags": ["特效", "Canvas"]
+  "tags": ["特效", "Canvas"],
+  "platforms": ["website", "explore"],
+  "scaffoldKind": "html",
+  "hasBackendTutorial": true,
+  "kickoffHint": "预览里的动效是最终目标。你的项目从空白页开始，分 4 步用提示词引导 AI 逐步实现。",
+  "goalDescription": "一个有视觉冲击力的互动页面：渐变或粒子背景 + 居中标题。",
+  "starterPrompt": "我要做一个带视觉特效的网页：全屏渐变或粒子背景，中间有大标题。请修改 index.html，可以用 Canvas 或 CSS 动画，先实现基础背景和标题结构。"
 }

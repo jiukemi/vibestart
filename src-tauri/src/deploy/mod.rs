@@ -1,8 +1,10 @@
+mod gitee_pages;
 mod github_pages;
 mod vercel;
 
 use serde::Serialize;
 
+pub use gitee_pages::deploy_gitee_pages;
 pub use github_pages::deploy_github_pages;
 pub use vercel::deploy_vercel;
 

@@ -1,0 +1,14 @@
+---
+description: VibeStart 仅支持 macOS 与 Windows，跨平台实现与文案约定
+alwaysApply: true
+---
+
+# 平台支持：macOS + Windows
+
+- **目标平台**：仅 macOS 与 Windows，不支持 Linux 桌面版。
+- **Rust**：用 `cfg!(target_os = "macos")` / `cfg!(target_os = "windows")` 分支；禁止假设 Unix 专属命令（`open`、`brew`）在 Windows 可用。
+- **安装**：macOS → Homebrew；Windows → winget / npm；npm CLI 默认前缀 `~/.vibestart/tools/npm`。
+- **路径**：macOS 用 `~/`、`/Applications`；Windows 用 `%USERPROFILE%`、`%LOCALAPPDATA%\Programs`；UI 文案用 `platform-ui.ts` / `useOsInfo`，勿写死 Finder、Cmd+Q。
+- **终端 IDE**：macOS → Terminal `.command`；Windows → cmd + UTF-8 说明脚本。
+- **已知弱项**：Windows SSH SOCKS（无 `nc`）、winget `--location` 可能被忽略、Claude Code 终端体验略逊 macOS。详见 `docs/PLATFORMS.md`。
+- **前端样式**：明暗模式均需兼容。

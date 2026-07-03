@@ -1,0 +1,21 @@
+---
+description: 复制到 AI 编辑器的提示词不得出现产品名
+globs: src/content/packs/**/*
+alwaysApply: false
+---
+
+# 用户提示词（复制到 Cursor / Claude Code 等）
+
+用户会在**另一款 AI 编辑器**里粘贴这些内容，提示词中**不要出现 VibeStart、vibestart** 等产品名。
+
+- **可以写**：「当前项目」「本仓库」「向导里的预览效果」「项目目录下的 index.html」
+- **不要写**：「VibeStart 模板预览」「在 VibeStart 中」「与 VibeStart 相同的 Key」
+- **scaffold 内 README / starterPrompt / prompts/*.md**：面向 AI 助手，只描述代码目标与文件路径
+- **应用内 UI、文档、配置路径**（如 `~/.vibestart`）可保留产品名
+
+示例：
+
+```text
+❌ 目标类似 VibeStart 模板预览：大标题 + 三个按钮
+✅ 目标效果：大标题 + 三个社交链接按钮，请修改 index.html
+```

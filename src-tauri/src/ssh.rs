@@ -36,6 +36,21 @@ pub fn ensure_key() -> Result<SshKeyInfo, String> {
     })
 }
 
+pub fn test_gitee() -> Result<String, String> {
+    let out = Command::new("ssh")
+        .args(["-T", "-o", "StrictHostKeyChecking=accept-new", "git@gitee.com"])
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    Ok(combined)
+}
+
 pub fn test_github() -> Result<String, String> {
     let out = Command::new("ssh")
         .args(["-T", "-o", "StrictHostKeyChecking=accept-new", "git@github.com"])

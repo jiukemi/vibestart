@@ -8,25 +8,36 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { difficultyLabel, loadPacks, type PackMeta } from "@/lib/packs";
-import { cn } from "@/lib/utils";
+import { difficultyLabel, type PackMeta } from "@/lib/packs";
+import {
+  selectableCardClasses,
+  selectableGridButtonClassName,
+} from "@/lib/selectable-card";
 
 interface PackSelectorProps {
+  packs: PackMeta[];
   selectedId: string | null;
   onSelect: (pack: PackMeta) => void;
   disabled?: boolean;
 }
 
-const PACKS = loadPacks();
-
 export function PackSelector({
+  packs,
   selectedId,
   onSelect,
   disabled = false,
 }: PackSelectorProps) {
+  if (packs.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        当前方向暂无匹配模板，请在工作台切换方向或联系更新。
+      </p>
+    );
+  }
+
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      {PACKS.map((pack) => {
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {packs.map((pack) => {
         const isSelected = selectedId === pack.id;
         return (
           <button
@@ -34,14 +45,13 @@ export function PackSelector({
             type="button"
             disabled={disabled}
             onClick={() => onSelect(pack)}
-            className="text-left disabled:cursor-not-allowed disabled:opacity-60"
+            className={selectableGridButtonClassName(
+              "disabled:cursor-not-allowed disabled:opacity-60",
+            )}
           >
             <Card
               size="sm"
-              className={cn(
-                "h-full cursor-pointer transition-colors hover:bg-muted/50",
-                isSelected && "ring-2 ring-primary",
-              )}
+              className={selectableCardClasses(isSelected, "h-full cursor-pointer")}
             >
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -60,6 +70,9 @@ export function PackSelector({
                       {tag}
                     </Badge>
                   ))}
+                  {pack.hasBackendTutorial && (
+                    <Badge variant="outline">可接后端</Badge>
+                  )}
                 </div>
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Clock className="size-3.5" />约 {pack.estimatedMinutes} 分钟
@@ -72,5 +85,3 @@ export function PackSelector({
     </div>
   );
 }
-
-export { PACKS };

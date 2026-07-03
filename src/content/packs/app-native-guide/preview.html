@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>原生 App 指引</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 32px 20px;
+      line-height: 1.6;
+      color: #333;
+    }
+    h1 { font-size: 22px; margin-bottom: 8px; }
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 16px;
+      margin: 16px 0;
+    }
+    .card h2 { font-size: 16px; margin-bottom: 8px; }
+    code { background: #f4f4f4; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #1a1a1a; color: #e0e0e0; }
+      .card { border-color: #444; background: #252525; }
+      code { background: #333; }
+    }
+  </style>
+</head>
+<body>
+  <h1>原生 App 开发路径</h1>
+  <p>先在官方 IDE 创建工程，再用 AI 写界面代码。</p>
+  <div class="card">
+    <h2>iOS · SwiftUI</h2>
+    <p>Xcode → Create Project → App → Interface: SwiftUI</p>
+  </div>
+  <div class="card">
+    <h2>Android · Compose</h2>
+    <p>Android Studio → Empty Activity → 勾选 Jetpack Compose</p>
+  </div>
+</body>
+</html>

@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Moon, Sun } from "lucide-react";
+import { ChevronLeft, ChevronRight, LayoutDashboard, Moon, RefreshCw, Sun } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { TopProgressBar } from "@/components/shared/TopProgressBar";
 import { TroubleshootPanel } from "@/components/layout/TroubleshootPanel";
 import { StepNav } from "@/components/wizard/StepNav";
 import { cn } from "@/lib/utils";
@@ -10,17 +11,29 @@ interface WizardLayoutProps {
   children: React.ReactNode;
   isDark: boolean;
   onToggleTheme: () => void;
+  onRefreshStep: () => void;
+  onOpenHome: () => void;
 }
 
 export function WizardLayout({
   children,
   isDark,
   onToggleTheme,
+  onRefreshStep,
+  onOpenHome,
 }: WizardLayoutProps) {
   const [troubleshootOpen, setTroubleshootOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    onRefreshStep();
+    window.setTimeout(() => setRefreshing(false), 400);
+  };
 
   return (
     <div className="flex h-svh bg-background text-foreground">
+      <TopProgressBar />
       <aside className="hidden w-72 shrink-0 border-r border-border bg-sidebar md:flex md:flex-col">
         <StepNav />
       </aside>
@@ -28,7 +41,30 @@ export function WizardLayout({
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-border px-4 py-3 md:px-6">
           <p className="text-sm text-muted-foreground md:hidden">VibeStart</p>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              title="刷新当前步骤（页面卡住时可试）"
+              aria-label="刷新当前步骤"
+              disabled={refreshing}
+              onClick={handleRefresh}
+            >
+              <RefreshCw
+                className={cn("size-4", refreshing && "animate-spin")}
+              />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              title="进入工作台"
+              aria-label="进入工作台"
+              onClick={onOpenHome}
+            >
+              <LayoutDashboard className="size-4" />
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -43,7 +79,7 @@ export function WizardLayout({
 
         <div className="flex min-h-0 flex-1">
           <main className="min-w-0 flex-1 overflow-y-auto p-4 md:p-8">
-            <div className="mx-auto max-w-2xl">{children}</div>
+            <div className="mx-auto w-full max-w-3xl">{children}</div>
           </main>
 
           <aside

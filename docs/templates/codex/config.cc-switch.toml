@@ -1,0 +1,15 @@
+# CC Switch 模式 · 由 VibeStart 生成
+# 使用前请确保 CC Switch 路由已开启，Codex 子开关已打开。
+# 默认本地地址：http://127.0.0.1:15721/v1
+
+model = "deepseek-v4-pro"
+model_provider = "vibestart-bridge"
+
+[model_providers.vibestart-bridge]
+name = "VibeStart via CC Switch"
+base_url = "http://127.0.0.1:15721/v1"
+wire_api = "responses"
+requires_openai_auth = false
+env_key = "OPENAI_API_KEY"
+
+developer_instructions = "请用简体中文与用户交流。除非用户要求英文，否则解释、计划、总结均使用中文。"

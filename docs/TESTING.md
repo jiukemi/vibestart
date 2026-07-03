@@ -1,78 +1,100 @@
 # VibeStart 手动 E2E 测试清单
 
-适用于 macOS 上的完整向导流程验证。测试前请从干净状态开始（可选：清除 `localStorage` 中的 `vibestart-wizard` 键）。
+适用于 **macOS** 与 **Windows** 的完整向导 + 工作台流程。平台差异见 [PLATFORMS.md](./PLATFORMS.md)。
+
+测试前可选：清除 `localStorage` 键 `vibestart-wizard` 以模拟新用户。
 
 ## 环境准备
 
+### macOS
+
 - [ ] macOS 12+，已安装 Xcode Command Line Tools
-- [ ] 可访问 GitHub、所选 LLM API 服务商
+- [ ] 可访问所选 LLM API 服务商
 - [ ] 终端可运行 `npm run tauri dev` 启动应用
 
-## 1. 完整向导流程（macOS）
+### Windows
 
-### 欢迎 & 环境检测
+- [ ] Windows 10/11，已启用 winget（Microsoft Store 应用安装程序）
+- [ ] 可访问所选 LLM API 服务商
+- [ ] 终端可运行 `npm run tauri dev` 启动应用
 
-- [ ] 启动应用，显示「欢迎」步骤
-- [ ] 进入「环境检测」，Rust `scan_environment` 返回 Git / Node / Cursor 等状态
-- [ ] 缺失工具时「安装工具」步骤显示 macOS（Homebrew）指引
+## 1. 极速轨（推荐新手 · 约 6 步）
 
-### IDE & GitHub
+### 欢迎 & 方向
 
-- [ ] 「选择 IDE」可切换 Cursor / VS Code / Windsurf 等卡片
-- [ ] 「GitHub 配置」子步骤可生成 SSH 密钥、复制公钥、测试连接
-- [ ] 测试连接结果写入界面（成功或权限错误提示）
+- [ ] 欢迎页默认选中「极速轨」；可切换「完整轨」
+- [ ] 侧边栏显示「极速轨」徽章与可见步骤数
+- [ ] 「还不确定，先试试」或「做网站」走极速轨
+- [ ] 选小程序/App 自动切换完整轨并提示；小程序方向可见「待办清单」与「点击得分」小游戏模板
+- [ ] 选网页后点「重新选择方向」→ 改选小程序：须再次「确认切换」才能下一步；模板/环境/侧栏步骤已切换
 
-### LLM API Key
+### 准备环境（合并原环境检测 + 安装）
 
-- [ ] 可切换 DeepSeek / 通义 / 智谱 / Kimi / OpenAI
-- [ ] 输入 API Key 后点击「测试连接」调用 `test_llm_api`
-- [ ] 验证成功后 Key 写入 `~/.vibestart/config.json`（权限 `600`）
-- [ ] 无效 Key 显示错误信息，不写入配置
+- [ ] 单页展示扫描结果 + 一键安装
+- [ ] 显示当前系统（macos / windows）与安装后端（Homebrew / winget）
+- [ ] 极速轨跳过「选择 IDE」「Git 托管」（侧栏不显示）
 
-### 首个项目 & 部署
+### Key → 项目 → 部署
 
-- [ ] 「首个项目」可选择模板包、预览 scaffold
-- [ ] 初始化项目到默认或自定义目录
-- [ ] 「部署上线」可选 Vercel 或 GitHub Pages
-- [ ] 部署成功显示 URL；失败显示日志
+- [ ] LLM 默认 DeepSeek；极速轨默认 Cursor（未选手动 IDE 步骤）
+- [ ] 首个项目：模板预览 + 折叠的「画原型 / 后端」可选块
+- [ ] Penpot / Excalidraw 链接可打开
+- [ ] 部署步仅 Vercel；可跳过部署
+- [ ] 完成后进入工作台
 
-### 完成
+## 2. 完整轨
 
-- [ ] 「完成」步骤显示祝贺与后续指引
-- [ ] 左侧导航所有已完成步骤有完成标记
+- [ ] 欢迎页选「完整轨」后侧栏显示 9 步（含 IDE、Git）
+- [ ] 小程序/App 完整轨跳过网页部署步（或显示预览说明）
+- [ ] Git 不可达时仅提示、不自动改用户选择
 
-## 2. 暗黑 / 明亮模式
+## 3. 工作台进阶
 
-- [ ] 右上角主题切换按钮在所有步骤可用
-- [ ] 切换后背景、文字、边框、卡片对比度正常
-- [ ] 故障排查面板、表单输入、按钮在两种模式下均可读
-- [ ] 刷新或重启应用后主题偏好保持（若已实现持久化）
+- [ ] 极速轨用户在工作台可「补开」IDE / Git / 环境步骤
+- [ ] 切换开发方向 → 打开「准备环境」
+- [ ] 后端辅助、Penpot 默认折叠
+- [ ] 「打开项目文件夹」文案为 Finder（macOS）或资源管理器（Windows）
 
-## 3. 进度持久化
+## 4. 平台专项（Windows）
 
-- [ ] 向导进行到中间步骤（如「GitHub 配置」）后完全退出应用
-- [ ] 重新启动后恢复到上次步骤
-- [ ] `completedSteps` 与 IDE / LLM / 模板等选择保持不变
-- [ ] 数据存储于 `localStorage` 键 `vibestart-wizard`
+- [ ] 环境扫描能识别 `%LOCALAPPDATA%\Programs\cursor\Cursor.exe`
+- [ ] Claude Code 启动弹出 cmd 窗口并显示中文说明
+- [ ] Git 托管步可检测 Windows 系统代理（设置 → 网络 → 代理）
+- [ ] IDE Key 同步说明使用 Ctrl+, / Alt+F4 等 Windows 文案
 
-## 4. 故障排查面板
+## 5. 平台专项（macOS）
 
-- [ ] 右侧栏可展开「故障排查」面板
-- [ ] 搜索框可过滤 5 条预置条目（Git、SSH、Vercel、API Key、GitHub 超时）
-- [ ] 点击条目显示现象 / 原因 / 解决步骤内容
-- [ ] 明亮与暗黑模式下样式正常
+- [ ] Claude Code 启动 Terminal `.command` 脚本 + 中文说明
+- [ ] 系统代理通过 scutil 检测
+- [ ] Xcode 扫描仅在 `/Applications/Xcode.app` 存在时为已安装
 
-## 5. 构建验证
+## 6. 持久化迁移（v6）
+
+- [ ] 从旧版 10 步升级：health-check + install-tools → setup-env
+- [ ] `wizardTrack` 补全为 express 或 full
+
+## 7. 构建
 
 ```bash
 npm run build
+cd src-tauri && cargo check
 ```
 
-- [ ] TypeScript 编译无错误
-- [ ] Vite 生产构建成功
+## 8. Codex + 国产模型桥接（选 Codex 时）
+
+详见 [CODEX-BRIDGE.md](./CODEX-BRIDGE.md)。两套方案**并存**，用户自选：
+
+| 轨 | 方案 | macOS / Win |
+|----|------|-------------|
+| A（默认） | CC Switch + 5 步图文 | ☐ 安装 ☐ 路由 ☐ Codex 对话 |
+| B | DeepSeek 轻量桥 + 3 步图文 | ☐ 桥 health ☐ Codex 对话 |
+
+- [ ] `~/.codex/config.toml` 为 `127.0.0.1` 本地地址，含 `wire_api = "responses"`
+- [ ] `~/.codex/AGENTS.md` 中文偏好已写入
+- [ ] LLM Key 验证与「桥接就绪」状态区分正确
 
 ## 测试结果记录
 
-| 日期 | 测试人 | macOS 版本 | 向导全流程 | 暗黑模式 | 进度持久 | 备注 |
-|------|--------|------------|------------|----------|----------|------|
-|      |        |            | ☐ 通过 ☐ 失败 | ☐ 通过 ☐ 失败 | ☐ 通过 ☐ 失败 |      |
+| 日期 | 测试人 | 平台 | 极速轨 | 完整轨 | 工作台 | 备注 |
+|------|--------|------|--------|--------|--------|------|
+|      |        | macOS / Win | ☐ 通过 ☐ 失败 | ☐ 通过 ☐ 失败 | ☐ 通过 ☐ 失败 |      |

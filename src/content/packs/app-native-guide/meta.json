@@ -1,0 +1,16 @@
+{
+  "id": "app-native-guide",
+  "title": "App · 原生入门指引",
+  "description": "Xcode / Android Studio 工程说明 + 分步提示词（不生成完整原生工程）",
+  "difficulty": 3,
+  "estimatedMinutes": 40,
+  "tags": ["原生", "Xcode"],
+  "platforms": ["app"],
+  "appStacks": ["native"],
+  "scaffoldKind": "guide",
+  "hasBackendTutorial": true,
+  "kickoffHint": "原生开发需在 Xcode 或 Android Studio 中新建官方模板工程。本包提供 README 指引与 AI 提示词，帮你在原生工程里做第一个界面。",
+  "goalDescription": "在 SwiftUI 或 Kotlin Compose 中做出简单「Hello + 按钮」界面。",
+  "previewHint": "原生 App 请在 Xcode 模拟器或 Android 模拟器中预览。",
+  "starterPrompt": "我已在 Xcode 创建了 SwiftUI App 工程（或 Android Studio 的 Empty Compose Activity）。请帮我写第一个界面：标题「我的 App」、居中 Hello 文案、一个按钮点击后计数 +1。请说明代码应放在哪个文件（ContentView.swift 或 MainActivity.kt）。注释中文。"
+}

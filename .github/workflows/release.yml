@@ -1,0 +1,64 @@
+# macOS + Windows 双平台安装包。Tauri 必须在对应系统上打包，无法在 Mac 上直接产出 .exe。
+# 触发：push tag v*（如 v0.1.0），或 Actions 页手动 Run workflow。
+name: release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin
+          - platform: windows-latest
+            args: ""
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: VibeStart v__VERSION__
+          releaseBody: |
+            macOS（Apple Silicon / Intel）与 Windows x64 安装包。
+
+            - **macOS**：`.dmg`（M 系列选 aarch64，Intel Mac 选 x64）
+            - **Windows**：`.exe`（NSIS）或 `.msi`
+
+            未签名版本首次安装时系统可能提示安全警告，属正常现象。
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

@@ -1,22 +1,8 @@
-use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::PathBuf;
+use crate::config::{load_config, save_config, LlmConfig};
 
-#[cfg(unix)]
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LlmConfig {
-    pub provider: String,
-    pub api_key: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub base_url: Option<String>,
-}
-
-#[derive(Debug, Default, Serialize, Deserialize)]
-struct AppConfig {
-    #[serde(default)]
-    llm: Option<LlmConfig>,
+#[derive(Debug, serde::Serialize)]
+pub struct LlmTestResult {
+    pub message: String,
 }
 
 struct ProviderEndpoint {
@@ -64,69 +50,6 @@ fn provider_endpoint(provider: &str, base_url: Option<&str>) -> Result<(String, 
     Ok((endpoint.url.to_string(), endpoint.model.to_string()))
 }
 
-fn vibestart_dir() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-    Ok(home.join(".vibestart"))
-}
-
-fn config_path() -> Result<PathBuf, String> {
-    Ok(vibestart_dir()?.join("config.json"))
-}
-
-fn load_config() -> AppConfig {
-    let path = match config_path() {
-        Ok(path) => path,
-        Err(_) => return AppConfig::default(),
-    };
-
-    if !path.exists() {
-        return AppConfig::default();
-    }
-
-    fs::read_to_string(&path)
-        .ok()
-        .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_default()
-}
-
-fn save_config(config: &AppConfig) -> Result<(), String> {
-    let dir = vibestart_dir()?;
-    fs::create_dir_all(&dir).map_err(|e| format!("创建配置目录失败: {e}"))?;
-
-    #[cfg(unix)]
-    {
-        let mut dir_perms = fs::metadata(&dir)
-            .map_err(|e| format!("读取目录权限失败: {e}"))?
-            .permissions();
-        dir_perms.set_mode(0o700);
-        fs::set_permissions(&dir, dir_perms).map_err(|e| format!("设置目录权限失败: {e}"))?;
-    }
-
-    let path = dir.join("config.json");
-    let json = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
-
-    #[cfg(unix)]
-    {
-        use std::io::Write;
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(&path)
-            .map_err(|e| format!("写入配置文件失败: {e}"))?;
-        file.write_all(json.as_bytes())
-            .map_err(|e| format!("写入配置文件失败: {e}"))?;
-    }
-
-    #[cfg(not(unix))]
-    {
-        fs::write(&path, json).map_err(|e| format!("写入配置文件失败: {e}"))?;
-    }
-
-    Ok(())
-}
-
 pub fn get_llm_config() -> Option<LlmConfig> {
     load_config().llm
 }
@@ -135,7 +58,7 @@ pub async fn test_api(
     provider: &str,
     api_key: &str,
     base_url: Option<&str>,
-) -> Result<String, String> {
+) -> Result<LlmTestResult, String> {
     let key = api_key.trim();
     if key.is_empty() {
         return Err("API Key 不能为空".into());
@@ -171,7 +94,9 @@ pub async fn test_api(
             base_url: base_url.map(str::to_string),
         });
         save_config(&config)?;
-        Ok("API Key 验证成功".into())
+        Ok(LlmTestResult {
+            message: "API Key 验证成功，已保存到 VibeStart".into(),
+        })
     } else {
         let detail = res.text().await.unwrap_or_default();
         Err(format!("验证失败 ({status}): {detail}"))

@@ -1,33 +1,55 @@
-import { Check, Circle } from "lucide-react";
+import { Check, Circle, LayoutDashboard } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { getVisibleStepIndices } from "@/lib/wizard-flow";
 import { WIZARD_STEPS } from "@/lib/steps";
 import { useWizardStore } from "@/stores/wizardStore";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 
 export function StepNav() {
   const currentStep = useWizardStore((s) => s.currentStep);
   const completedSteps = useWizardStore((s) => s.completedSteps);
+  const selections = useWizardStore((s) => s.selections);
   const setCurrentStep = useWizardStore((s) => s.setCurrentStep);
+  const enterHome = useWizardStore((s) => s.enterHome);
+  const completeIndex = WIZARD_STEPS.length - 1;
+  const canReturnHome = completedSteps.includes(completeIndex);
+
+  const visibleIndices = getVisibleStepIndices(selections);
+  const isExpress = selections.wizardTrack === "express";
 
   return (
     <nav className="flex h-full flex-col">
       <div className="border-b border-sidebar-border px-4 py-5">
-        <h1 className="text-lg font-semibold tracking-tight text-sidebar-foreground">
-          VibeStart
-        </h1>
-        <p className="mt-1 text-xs text-muted-foreground">Vibe Coding 向导</p>
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold tracking-tight text-sidebar-foreground">
+            VibeStart
+          </h1>
+          <Badge variant="secondary" className="text-[10px]">
+            {isExpress ? "极速轨" : "完整轨"}
+          </Badge>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {isExpress
+            ? `约 ${visibleIndices.length} 步 · 今晚做出可分享网页`
+            : "完整向导 · IDE / Git / 部署"}
+        </p>
       </div>
 
       <ScrollArea className="flex-1 px-2 py-3">
         <ol className="space-y-1">
-          {WIZARD_STEPS.map((step, index) => {
+          {visibleIndices.map((index, visIdx) => {
+            const step = WIZARD_STEPS[index];
             const isActive = index === currentStep;
             const isCompleted = completedSteps.includes(index);
+            const prevVisible = visibleIndices[visIdx - 1];
             const isAccessible =
               index <= currentStep ||
-              completedSteps.includes(index - 1) ||
-              index === 0;
+              (prevVisible !== undefined &&
+                completedSteps.includes(prevVisible)) ||
+              index === visibleIndices[0];
 
             return (
               <li key={step.id}>
@@ -72,7 +94,27 @@ export function StepNav() {
             );
           })}
         </ol>
+
+        {isExpress && (
+          <p className="mt-4 px-3 text-xs text-muted-foreground">
+            IDE、Git 等步骤已隐藏。编辑器在「准备环境」中确认；更多选项可在工作台补开。
+          </p>
+        )}
       </ScrollArea>
+
+      {canReturnHome && (
+        <div className="border-t border-sidebar-border p-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full justify-start"
+            onClick={enterHome}
+          >
+            <LayoutDashboard className="size-4" />
+            返回工作台
+          </Button>
+        </div>
+      )}
     </nav>
   );
 }

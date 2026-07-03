@@ -3,7 +3,10 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": [
-    "main"
+    "main",
+    "browser-*",
+    "github-browser",
+    "gitee-browser"
   ],
   "permissions": [
     "core:default",
@@ -57,6 +60,21 @@
           "args": true
         },
         {
+          "name": "claude",
+          "cmd": "claude",
+          "args": true
+        },
+        {
+          "name": "codex",
+          "cmd": "codex",
+          "args": true
+        },
+        {
+          "name": "osascript",
+          "cmd": "osascript",
+          "args": true
+        },
+        {
           "name": "cursor",
           "cmd": "cursor",
           "args": true
@@ -80,8 +98,23 @@
           "name": "which",
           "cmd": "which",
           "args": true
+        },
+        {
+          "name": "scutil",
+          "cmd": "scutil",
+          "args": true
+        },
+        {
+          "name": "nc",
+          "cmd": "nc",
+          "args": true
         }
       ]
-    }
+    },
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-create",
+    "core:window:allow-center",
+    "core:window:allow-set-focus",
+    "dialog:default"
   ]
 }

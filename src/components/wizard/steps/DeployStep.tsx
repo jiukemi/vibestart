@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, ExternalLink, Loader2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 
@@ -17,22 +17,29 @@ import {
 import { StepShell } from "@/components/wizard/StepShell";
 import { useTauriCommand } from "@/hooks/useTauriCommand";
 import type { DeployResult } from "@/lib/tauri-types";
-import { WIZARD_STEPS } from "@/lib/steps";
+import { getStepMeta } from "@/lib/wizard-index";
 import { useWizardStore } from "@/stores/wizardStore";
 
-const step = WIZARD_STEPS[7];
+const step = getStepMeta("deploy");
 
 export function DeployStep() {
   const projectDir = useWizardStore((s) => s.selections.projectDir);
   const deployTarget = useWizardStore((s) => s.selections.deployTarget);
+  const gitProvider = useWizardStore((s) => s.selections.gitProvider);
   const githubUsername = useWizardStore((s) => s.selections.githubUsername);
+  const giteeUsername = useWizardStore((s) => s.selections.giteeUsername);
   const githubRepoName = useWizardStore((s) => s.selections.githubRepoName);
+  const wizardTrack = useWizardStore((s) => s.selections.wizardTrack);
   const setSelection = useWizardStore((s) => s.setSelection);
+
+  const expressMode = wizardTrack === "express";
 
   const [copied, setCopied] = useState(false);
   const [deployLog, setDeployLog] = useState<string | null>(null);
   const [deployUrl, setDeployUrl] = useState<string | null>(null);
   const [deploySuccess, setDeploySuccess] = useState(false);
+  const [deploySkipped, setDeploySkipped] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const validateCommand = useTauriCommand<void>();
   const deployCommand = useTauriCommand<DeployResult>();
@@ -40,12 +47,24 @@ export function DeployStep() {
 
   const selected = (deployTarget ?? "vercel") as DeployTarget;
 
+  useEffect(() => {
+    if (gitProvider === "gitee" && selected !== "gitee-pages" && selected !== "vercel") {
+      setSelection("deployTarget", "gitee-pages");
+    } else if (gitProvider === "github" && selected === "gitee-pages") {
+      setSelection("deployTarget", "github-pages");
+    } else if (gitProvider === "skip" && selected !== "vercel") {
+      setSelection("deployTarget", "vercel");
+    }
+  }, [gitProvider, selected, setSelection]);
+
   const handleDeploy = useCallback(async () => {
     if (!projectDir) return;
 
     setDeployLog(null);
     setDeployUrl(null);
     setDeploySuccess(false);
+    setDeploySkipped(false);
+    setLocalError(null);
 
     try {
       await validateCommand.run("validate_project", { projectDir });
@@ -57,10 +76,24 @@ export function DeployStep() {
       let result: DeployResult;
       if (selected === "vercel") {
         result = await deployCommand.run("deploy_vercel", { projectDir });
+      } else if (selected === "gitee-pages") {
+        const username = (giteeUsername ?? "").trim();
+        const repo = (githubRepoName ?? "").trim();
+        if (!username || !repo) {
+          setLocalError("请填写 Gitee 用户名和仓库名称后再部署。");
+          deployCommand.reset();
+          return;
+        }
+        result = await deployCommand.run("deploy_gitee_pages", {
+          projectDir,
+          username,
+          repo,
+        });
       } else {
         const username = (githubUsername ?? "").trim();
         const repo = (githubRepoName ?? "").trim();
         if (!username || !repo) {
+          setLocalError("请填写 GitHub 用户名和仓库名称后再部署。");
           deployCommand.reset();
           return;
         }
@@ -76,12 +109,15 @@ export function DeployStep() {
         setDeployUrl(result.url);
         setDeploySuccess(true);
         setSelection("deployUrl", result.url);
+      } else if (!result.success) {
+        setLocalError("部署未成功，请查看下方日志或稍后重试。");
       }
     } catch {
       // error handled by hook
     }
   }, [
     deployCommand,
+    giteeUsername,
     githubRepoName,
     githubUsername,
     projectDir,
@@ -100,32 +136,71 @@ export function DeployStep() {
   const canDeploy =
     Boolean(projectDir) &&
     (selected === "vercel" ||
-      ((githubUsername ?? "").trim() && (githubRepoName ?? "").trim()));
+      (selected === "gitee-pages" &&
+        (giteeUsername ?? "").trim() &&
+        (githubRepoName ?? "").trim()) ||
+      (selected === "github-pages" &&
+        (githubUsername ?? "").trim() &&
+        (githubRepoName ?? "").trim()));
 
-  const error = validateCommand.error ?? deployCommand.error ?? loginCommand.error;
+  const error =
+    localError ?? validateCommand.error ?? deployCommand.error ?? loginCommand.error;
 
   return (
     <StepShell
       title={step.title}
       description={step.description}
-      nextDisabled={!deploySuccess}
+      nextDisabled={!deploySuccess && !deploySkipped}
+      nextLabel={deploySkipped ? "下一步：查看总结" : "完成，查看总结"}
+      secondaryNext={
+        !deploySuccess && !deploySkipped
+          ? {
+              label: "暂时跳过，稍后部署",
+              onClick: () => {
+                setDeploySkipped(true);
+                setSelection("deployUrl", null);
+              },
+            }
+          : undefined
+      }
     >
       <div className="space-y-4">
+        {expressMode && (
+          <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground dark:bg-primary/10">
+            极速轨：使用 <strong className="text-foreground">Vercel</strong>{" "}
+            一键部署即可分享链接。GitHub / Gitee Pages 可在工作台切换完整轨后再试。
+          </p>
+        )}
+
         {!projectDir && (
           <p className="text-sm text-destructive">
             未找到项目目录，请先完成「首个项目」步骤。
           </p>
         )}
 
+        {deploySkipped && (
+          <p className="rounded-lg border border-border bg-muted/50 p-3 text-sm text-muted-foreground dark:bg-muted/30">
+            已跳过部署。你仍可在工作台或重新进入本步骤完成上线；本地项目路径已保存在上一步。
+          </p>
+        )}
+
         <DeployCards
           selected={selected}
+          gitProvider={gitProvider}
+          expressMode={expressMode}
           onSelect={(target) => setSelection("deployTarget", target)}
           githubUsername={githubUsername ?? ""}
+          giteeUsername={giteeUsername ?? ""}
           githubRepoName={githubRepoName ?? ""}
           onGithubUsernameChange={(value) =>
             setSelection("githubUsername", value)
           }
-          onGithubRepoChange={(value) => setSelection("githubRepoName", value)}
+          onGiteeUsernameChange={(value) =>
+            setSelection("giteeUsername", value)
+          }
+          onGithubRepoChange={(value) =>
+            setSelection("githubRepoName", value)
+          }
           onVercelLogin={() => void loginCommand.run("vercel_login")}
           vercelLoginLoading={loginCommand.loading}
         >
@@ -178,7 +253,7 @@ export function DeployStep() {
                 </div>
               )}
               {deployLog && (
-                <pre className="max-h-48 overflow-auto rounded-lg border border-border bg-muted/50 p-3 text-xs whitespace-pre-wrap text-foreground">
+                <pre className="max-h-48 overflow-auto rounded-lg border border-border bg-muted/50 p-3 text-xs whitespace-pre-wrap text-foreground dark:bg-muted/30">
                   {deployLog}
                 </pre>
               )}
@@ -212,8 +287,13 @@ export function DeployStep() {
                         {copied ? "已复制" : "复制链接"}
                       </Button>
                     </div>
+                    {selected === "gitee-pages" && (
+                      <p className="text-xs text-muted-foreground">
+                        若页面暂未生效，请到 Gitee 仓库 → 服务 → Gitee Pages 点击「启动」或「更新」。
+                      </p>
+                    )}
                   </div>
-                  <div className="rounded-lg border border-border bg-background p-3">
+                  <div className="rounded-lg border border-border bg-background p-3 dark:bg-card">
                     <QRCodeSVG value={deployUrl} size={96} />
                   </div>
                 </div>
@@ -223,9 +303,12 @@ export function DeployStep() {
         )}
 
         {loginCommand.data && (
-          <pre className="max-h-32 overflow-auto rounded-lg border border-border bg-muted/50 p-3 text-xs whitespace-pre-wrap text-foreground">
+          <p className="rounded-lg border border-border bg-muted/50 p-3 text-sm text-muted-foreground dark:bg-muted/30">
             {loginCommand.data}
-          </pre>
+          </p>
+        )}
+        {loginCommand.error && (
+          <p className="text-sm text-destructive">{loginCommand.error}</p>
         )}
       </div>
     </StepShell>
