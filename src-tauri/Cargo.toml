@@ -29,3 +29,6 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 url = "2"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tauri-plugin-dialog = "2"
+
+[profile.release]
+strip = "none"

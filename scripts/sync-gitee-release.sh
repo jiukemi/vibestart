@@ -52,12 +52,16 @@ gitee_api() {
 gitee_ok() {
   local body="$1"
   [[ -n "$body" && "$body" != "null" ]] || return 1
-  echo "$body" | python3 -c "
+  if echo "$body" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
-if isinstance(d, dict) and ('message' in d or 'messages' in d):
-    raise SystemExit(str(d))
-" 2>/dev/null
+if isinstance(d, dict):
+    if d.get('message') or d.get('messages') or d.get('error'):
+        raise SystemExit(json.dumps(d, ensure_ascii=False))
+" 2>/dev/null; then
+    return 0
+  fi
+  return 1
 }
 
 parse_field() {
@@ -112,6 +116,10 @@ workdir, token, owner, repo = sys.argv[1:5]
 release = json.loads(Path(workdir, "release.json").read_text(encoding="utf-8"))
 for asset in release.get("assets", []):
     name = asset["name"]
+    lower = name.lower()
+    if not (lower.endswith(".dmg") or lower.endswith(".exe") or lower.endswith(".msi")):
+        print(f"  · 跳过 {name}")
+        continue
     asset_id = asset["id"]
     url = f"https://api.github.com/repos/{owner}/{repo}/releases/assets/{asset_id}"
     req = urllib.request.Request(

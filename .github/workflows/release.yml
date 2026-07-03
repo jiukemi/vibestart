@@ -104,8 +104,17 @@ jobs:
 
       - run: npm ci
 
-      - name: Build .exe (NSIS only, skip MSI/WiX)
-        run: npm run tauri build -- --bundles nsis
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build .exe (NSIS only)
+        run: npx @tauri-apps/cli@latest tauri build --verbose --bundles nsis
+        env:
+          RUST_BACKTRACE: "1"
+
+      - name: List bundle output
+        shell: pwsh
+        run: Get-ChildItem -Recurse src-tauri/target/release/bundle | Select-Object FullName
 
       - uses: actions/upload-artifact@v4
         with:

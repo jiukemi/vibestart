@@ -1,0 +1,28 @@
+# 仅同步：GitHub Release 已有附件 → 上传到 Gitee（无需重新打包）
+name: sync-gitee-only
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: "Release tag，例如 v0.1.0"
+        required: true
+        default: "v0.1.0"
+
+jobs:
+  sync-gitee:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync GitHub Release → Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ -z "${GITEE_TOKEN:-}" ]]; then
+            echo "错误: 未配置 GITEE_TOKEN secret" >&2
+            exit 1
+          fi
+          chmod +x scripts/sync-gitee-release.sh
+          ./scripts/sync-gitee-release.sh "${{ inputs.version_tag }}"
