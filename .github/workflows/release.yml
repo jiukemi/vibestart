@@ -1,73 +1,172 @@
-# macOS + Windows 双平台安装包。Tauri 必须在对应系统上打包，无法在 Mac 上直接产出 .exe。
-# 触发：push tag v*（如 v0.1.0），或 Actions 页手动 Run workflow。
+# 发版：push tag v* 或 Actions 手动 Run（可重打已有 tag，如 v0.1.0）
 name: release
 
 on:
   workflow_dispatch:
+    inputs:
+      version_tag:
+        description: "Release tag，例如 v0.1.0"
+        required: true
+        default: "v0.1.0"
   push:
     tags:
       - "v*"
 
-jobs:
-  publish:
-    permissions:
-      contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: macos-latest
-            args: --target aarch64-apple-darwin
-          - platform: macos-latest
-            args: --target x86_64-apple-darwin
-          - platform: windows-latest
-            args: ""
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version_tag || github.ref_name }}
 
-    runs-on: ${{ matrix.platform }}
+jobs:
+  build-mac-arm:
+    name: macOS Apple Silicon
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: lts/*
           cache: npm
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: aarch64-apple-darwin
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
+      - uses: swatinem/rust-cache@v2
         with:
           workspaces: ./src-tauri -> target
 
-      - name: Install frontend dependencies
-        run: npm ci
+      - run: npm ci
 
-      - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build .dmg (aarch64)
+        run: npm run tauri build -- --target aarch64-apple-darwin --bundles dmg
+
+      - uses: actions/upload-artifact@v4
         with:
-          tagName: v__VERSION__
-          releaseName: VibeStart v__VERSION__
-          releaseBody: |
+          name: macos-aarch64-dmg
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+  build-mac-intel:
+    name: macOS Intel
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - run: npm ci
+
+      - name: Build .dmg (x64)
+        run: npm run tauri build -- --target x86_64-apple-darwin --bundles dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-x64-dmg
+          path: src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+  build-windows:
+    name: Windows x64 (NSIS)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Enable long paths
+        run: git config --global core.longpaths true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - run: npm ci
+
+      - name: Build .exe (NSIS only, skip MSI/WiX)
+        run: npm run tauri build -- --bundles nsis
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-nsis-exe
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+
+  github-release:
+    name: Publish GitHub Release
+    needs: [build-mac-arm, build-mac-intel, build-windows]
+    runs-on: ubuntu-latest
+    if: >-
+      always() &&
+      !cancelled() &&
+      (
+        needs.build-mac-arm.result == 'success' ||
+        needs.build-mac-intel.result == 'success' ||
+        needs.build-windows.result == 'success'
+      )
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: List release assets
+        run: find release-assets -type f | sort
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: VibeStart ${{ env.RELEASE_TAG }}
+          draft: false
+          generate_release_notes: true
+          body: |
             macOS（Apple Silicon / Intel）与 Windows x64 安装包。
 
             - **macOS**：`.dmg`（M 系列选 aarch64，Intel Mac 选 x64）
-            - **Windows**：`.exe`（NSIS）或 `.msi`
+            - **Windows**：`.exe`（NSIS）
 
             未签名版本首次安装时系统可能提示安全警告，属正常现象。
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.args }}
+
+            | 平台 | 状态 |
+            |------|------|
+            | macOS arm64 | ${{ needs.build-mac-arm.result }} |
+            | macOS x64 | ${{ needs.build-mac-intel.result }} |
+            | Windows x64 | ${{ needs.build-windows.result }} |
+          files: release-assets/**/*
+          fail_on_unmatched_files: false
 
   sync-gitee:
     name: Sync to Gitee Release
-    needs: publish
+    needs: github-release
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
+    if: >-
+      always() &&
+      needs.github-release.result == 'success' &&
+      github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
@@ -75,20 +174,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          for i in $(seq 1 30); do
+          TAG="${{ env.RELEASE_TAG }}"
+          for i in $(seq 1 20); do
             COUNT=$(curl -sS \
               -H "Authorization: Bearer ${GH_TOKEN}" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}" \
               | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('assets') or []))" 2>/dev/null || echo 0)
-            echo "GitHub Release 附件数: ${COUNT} (尝试 ${i}/30)"
-            if [[ "$COUNT" -ge 2 ]]; then
+            echo "GitHub Release 附件数: ${COUNT} (尝试 ${i}/20)"
+            if [[ "$COUNT" -ge 1 ]]; then
               exit 0
             fi
-            sleep 20
+            sleep 15
           done
-          echo "警告: 附件可能尚未全部就绪，继续尝试同步"
+          echo "警告: 未检测到附件，仍尝试同步"
 
       - name: Upload assets to Gitee
         env:
@@ -96,9 +195,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [[ -z "${GITEE_TOKEN:-}" ]]; then
-            echo "跳过: 未配置 GITEE_TOKEN secret"
-            echo "配置后下次发版将自动同步到 Gitee，无需手动上传"
-            exit 0
+            echo "错误: 未配置 GITEE_TOKEN secret" >&2
+            exit 1
           fi
           chmod +x scripts/sync-gitee-release.sh
-          ./scripts/sync-gitee-release.sh "${GITHUB_REF_NAME}"
+          ./scripts/sync-gitee-release.sh "${{ env.RELEASE_TAG }}"

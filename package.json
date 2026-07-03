@@ -11,7 +11,8 @@
     "build:win": "tauri build -- --runner cargo-xwin --target x86_64-pc-windows-msvc",
     "release": "./scripts/release.sh",
     "release:minor": "./scripts/release.sh minor",
-    "release:major": "./scripts/release.sh major"
+    "release:major": "./scripts/release.sh major",
+    "release:retry": "./scripts/retry-release.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
