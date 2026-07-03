@@ -2,9 +2,11 @@ use serde::Serialize;
 use std::path::Path;
 use std::process::Command;
 
+use crate::config::ToolsInstallMode;
+use crate::install_progress;
 use crate::os::Platform;
 use crate::tools_install::{self, ResolvedToolsPaths};
-use crate::config::ToolsInstallMode;
+use tauri::AppHandle;
 
 #[derive(Debug, Serialize)]
 pub struct CommandResult {
@@ -19,19 +21,28 @@ enum ToolAction {
     Uninstall,
 }
 
-pub fn install_tool(tool: &str) -> CommandResult {
-    run_for_tool(tool, ToolAction::Install)
+pub fn install_tool(tool: &str, app: Option<&AppHandle>) -> CommandResult {
+    install_progress::begin(app, tool);
+    let result = run_for_tool(tool, ToolAction::Install, app);
+    install_progress::finish(app, result.success);
+    result
 }
 
-pub fn upgrade_tool(tool: &str) -> CommandResult {
-    run_for_tool(tool, ToolAction::Upgrade)
+pub fn upgrade_tool(tool: &str, app: Option<&AppHandle>) -> CommandResult {
+    install_progress::begin(app, tool);
+    let result = run_for_tool(tool, ToolAction::Upgrade, app);
+    install_progress::finish(app, result.success);
+    result
 }
 
-pub fn uninstall_tool(tool: &str) -> CommandResult {
-    run_for_tool(tool, ToolAction::Uninstall)
+pub fn uninstall_tool(tool: &str, app: Option<&AppHandle>) -> CommandResult {
+    install_progress::emit(app, "start", &format!("开始卸载 {tool}…"), None);
+    let result = run_for_tool(tool, ToolAction::Uninstall, app);
+    install_progress::finish(app, result.success);
+    result
 }
 
-fn run_for_tool(tool: &str, action: ToolAction) -> CommandResult {
+fn run_for_tool(tool: &str, action: ToolAction, app: Option<&AppHandle>) -> CommandResult {
     let config = tools_install::tools_install_config();
     let paths = tools_install::resolve_paths(&config);
     if let Err(e) = tools_install::ensure_install_dirs(&paths) {
@@ -197,9 +208,15 @@ fn run_for_tool(tool: &str, action: ToolAction) -> CommandResult {
             "npm",
             vec!["uninstall", "-g", "@anthropic-ai/claude-code"],
         ),
-        ("codex", ToolAction::Install, _) => ("npm", vec!["install", "-g", "@openai/codex"]),
-        ("codex", ToolAction::Upgrade, _) => ("npm", vec!["install", "-g", "@openai/codex"]),
-        ("codex", ToolAction::Uninstall, _) => ("npm", vec!["uninstall", "-g", "@openai/codex"]),
+        ("codex", ToolAction::Install, _) => {
+            return crate::codex_app::install_codex_app(app);
+        }
+        ("codex", ToolAction::Upgrade, _) => {
+            return crate::codex_app::upgrade_codex_app(app);
+        }
+        ("codex", ToolAction::Uninstall, _) => {
+            return crate::codex_app::uninstall_codex_app(app);
+        }
         ("cc-switch", ToolAction::Install, Platform::Macos) => {
             ("brew", vec!["install", "--cask", "cc-switch"])
         }
@@ -234,10 +251,10 @@ fn run_for_tool(tool: &str, action: ToolAction) -> CommandResult {
             vec!["uninstall", "-e", "--id", "farion1231.CC-Switch"],
         ),
         ("codex-bridge", ToolAction::Install, _) => {
-            return crate::codex_bridge::install_deepseek_bridge();
+            return crate::codex_bridge::install_deepseek_bridge(app);
         }
         ("codex-bridge", ToolAction::Upgrade, _) => {
-            return crate::codex_bridge::install_deepseek_bridge();
+            return crate::codex_bridge::install_deepseek_bridge(app);
         }
         ("codex-bridge", ToolAction::Uninstall, _) => {
             return CommandResult {
@@ -393,7 +410,13 @@ fn run_for_tool(tool: &str, action: ToolAction) -> CommandResult {
         apply_custom_install_location(tool, action, &mut args, &paths);
     }
 
-    run_command_with_paths(program, &args, &paths, &location_note)
+    let mut result = run_command_with_paths(app, program, &args, &paths, &location_note);
+    if program == "npm" && matches!(action, ToolAction::Install | ToolAction::Upgrade) {
+        if let Some(cli) = npm_cli_for_tool(tool) {
+            result = verify_npm_cli_install(cli, &paths, result);
+        }
+    }
+    result
 }
 
 fn install_location_note(paths: &ResolvedToolsPaths) -> String {
@@ -418,12 +441,61 @@ fn apply_npm_prefix(args: &mut Vec<String>, paths: &ResolvedToolsPaths) {
     if cmd != "install" && cmd != "uninstall" {
         return;
     }
-    if let Some(idx) = args.iter().position(|a| a == "-g") {
-        args.remove(idx);
-    }
+    // Keep `-g`: `npm install --prefix DIR -g PKG` links binaries into DIR/bin.
+    // Without `-g`, npm only adds a local dependency and leaves bin/ empty.
     let prefix = paths.npm_prefix.to_string_lossy().into_owned();
     args.insert(1, prefix);
     args.insert(1, "--prefix".into());
+}
+
+fn npm_cli_for_tool(tool: &str) -> Option<&'static str> {
+    match tool {
+        "claude-code" => Some("claude"),
+        "vercel" => Some("vercel"),
+        _ => None,
+    }
+}
+
+fn verify_npm_cli_install(
+    cli: &str,
+    paths: &ResolvedToolsPaths,
+    mut result: CommandResult,
+) -> CommandResult {
+    if !result.success {
+        return result;
+    }
+
+    let Some(path) = tools_install::resolve_command_in_prefix(cli) else {
+        result.success = false;
+        result.log.push_str(&format!(
+            "\n\n安装未完成：未在 {} 找到 {cli} 可执行文件。\n\
+             请确认 Node.js / npm 可用后重试。",
+            tools_install::npm_bin_dir(&paths.npm_prefix).display()
+        ));
+        return result;
+    };
+
+    match Command::new(&path).arg("--version").output() {
+        Ok(out) if out.status.success() => {
+            let version = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            result.log.push_str(&format!(
+                "\n\n✓ {cli} 已就绪\n  路径: {path}\n  版本: {version}\n"
+            ));
+        }
+        Ok(out) => {
+            let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            result.success = false;
+            result.log.push_str(&format!(
+                "\n\n已安装但无法运行 {cli}（{path}）: {err}\n"
+            ));
+        }
+        Err(e) => {
+            result.success = false;
+            result.log.push_str(&format!("\n\n已安装但无法运行 {cli}: {e}\n"));
+        }
+    }
+
+    result
 }
 
 fn apply_custom_install_location(
@@ -489,11 +561,18 @@ fn prepend_path(cmd: &mut Command, extra: &Path) {
 }
 
 fn run_command_with_paths(
+    app: Option<&AppHandle>,
     program: &str,
     args: &[String],
     paths: &ResolvedToolsPaths,
     location_note: &str,
 ) -> CommandResult {
+    install_progress::emit(
+        app,
+        "run",
+        &format!("正在执行 {program}…"),
+        Some(15),
+    );
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let mut cmd = Command::new(program);
     cmd.args(&arg_refs);
@@ -581,5 +660,32 @@ pub fn run_command(program: &str, args: &[&str]) -> CommandResult {
             success: false,
             log: format!("无法执行 {program}: {error}"),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::ToolsInstallConfig;
+
+    #[test]
+    fn npm_prefix_keeps_global_flag_for_bin_links() {
+        let paths = tools_install::resolve_paths(&ToolsInstallConfig::default());
+        let mut args = vec![
+            "install".into(),
+            "-g".into(),
+            "@openai/codex".into(),
+        ];
+        apply_npm_prefix(&mut args, &paths);
+        assert_eq!(
+            args,
+            vec![
+                "install",
+                "--prefix",
+                paths.npm_prefix.to_string_lossy().as_ref(),
+                "-g",
+                "@openai/codex",
+            ]
+        );
     }
 }

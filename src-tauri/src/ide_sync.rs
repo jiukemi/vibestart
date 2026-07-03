@@ -3,7 +3,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::codex_bridge::{
-    self, build_codex_config_toml, effective_mode, port_for_mode, write_agents_md,
+    build_codex_config_toml, build_codex_openai_config_toml, effective_mode, port_for_mode,
+    write_agents_md,
 };
 use crate::config::{self, CodexBridgeMode, vibestart_dir};
 
@@ -495,16 +496,19 @@ fn sync_codex(provider: &str, api_key: &str, profile: &ProviderProfile) -> Inner
     }
 
     let config_path = codex_home.join("config.toml");
-    let config_body = if provider == "openai" {
-        format!(
-            "model = \"{model}\"\nmodel_provider = \"openai\"\n",
-            model = profile.model_hint
-        )
+    let existing = fs::read_to_string(&config_path).unwrap_or_default();
+    let preserved = crate::codex_app::extract_codex_preserved_sections(&existing);
+    let mut config_body = if provider == "openai" {
+        build_codex_openai_config_toml(&profile.model_hint)
     } else {
         let model = codex_model_for_provider(provider, profile);
         let port = port_for_mode(bridge_cfg, mode);
         build_codex_config_toml(mode, model, port)
     };
+    if !preserved.is_empty() {
+        config_body.push('\n');
+        config_body.push_str(&preserved);
+    }
 
     if let Err(e) = fs::write(&config_path, config_body) {
         return InnerSyncResult {
@@ -514,14 +518,33 @@ fn sync_codex(provider: &str, api_key: &str, profile: &ProviderProfile) -> Inner
         };
     }
 
-    if provider != "openai" {
-        if let Err(e) = write_agents_md(&codex_home) {
+    if let Err(e) = crate::codex_app::merge_general_locale(&codex_home) {
+        return InnerSyncResult {
+            success: false,
+            message: format!("写入 Codex 汉化配置失败: {e}"),
+            details: vec![],
+        };
+    }
+
+    let auth_note = match crate::codex_app::login_codex_with_api_key(&codex_home, api_key) {
+        Ok(note) => note,
+        Err(e) => {
             return InnerSyncResult {
                 success: false,
-                message: e,
+                message: format!("写入 Codex API Key 登录失败: {e}"),
                 details: vec![],
             };
         }
+    };
+
+    let _ = crate::codex_app::clear_locale_cache(&codex_home);
+
+    if let Err(e) = write_agents_md(&codex_home) {
+        return InnerSyncResult {
+            success: false,
+            message: e,
+            details: vec![],
+        };
     }
 
     if let Err(e) = config::save_config(&app_cfg) {
@@ -544,12 +567,29 @@ fn sync_codex(provider: &str, api_key: &str, profile: &ProviderProfile) -> Inner
 
     InnerSyncResult {
         success: true,
-        message: "已写入 ~/.codex/config.toml、.env 与 AGENTS.md".into(),
+        message: "已写入 ~/.codex 配置、API Key 登录与中文界面".into(),
         details: vec![
             format!("模型: {}", profile.model_hint),
+            auth_note,
             bridge_note.into(),
-            "API Key 有效 ≠ 桥接就绪，请完成桥接配置后再启动 Codex。".into(),
-            "在终端运行 codex 即可使用（桥接就绪后）".into(),
+            if provider == "openai" {
+                format!(
+                    "请完全退出 Codex 后重新打开（{}）。若仍见登录页，选「使用 API Key」即可。",
+                    quit_app_hint()
+                )
+            } else {
+                format!(
+                    "国产模型需本地桥接在运行（8098 或 CC Switch 15721）。请确认已点「启动 DeepSeek 桥」且健康检查通过。"
+                )
+            },
+            if provider == "openai" {
+                "OpenAI 官方直连，无需本地桥接。".into()
+            } else {
+                format!(
+                    "桥接就绪后打开 Codex 桌面客户端（{} 完全退出后重启）",
+                    quit_app_hint()
+                )
+            },
         ],
     }
 }
@@ -998,9 +1038,10 @@ fn verify_claude_code(expected_key: &str, profile: &ProviderProfile) -> IdeSyncV
 }
 
 fn verify_codex(expected_key: &str, _profile: &ProviderProfile) -> IdeSyncVerifyItem {
-    let env_path = dirs::home_dir().map(|h| h.join(".codex").join(".env"));
+    let codex_home = dirs::home_dir().map(|h| h.join(".codex"));
+    let env_path = codex_home.as_ref().map(|h| h.join(".env"));
     let mut key_matched = false;
-    if let Some(path) = env_path.filter(|p| p.exists()) {
+    if let Some(path) = env_path.as_ref().filter(|p| p.exists()) {
         if let Ok(raw) = fs::read_to_string(path) {
             for line in raw.lines() {
                 if line.starts_with("OPENAI_API_KEY=") {
@@ -1012,44 +1053,62 @@ fn verify_codex(expected_key: &str, _profile: &ProviderProfile) -> IdeSyncVerify
         }
     }
 
-    let config_path = dirs::home_dir().map(|h| h.join(".codex").join("config.toml"));
-    let mut base_url_ok = false;
-    let mut bridge_config_ok = false;
-    if let Some(path) = config_path.as_ref().filter(|p| p.exists()) {
+    let auth_path = codex_home.as_ref().map(|h| h.join("auth.json"));
+    let mut auth_key_matched = false;
+    if let Some(path) = auth_path.as_ref().filter(|p| p.exists()) {
         if let Ok(raw) = fs::read_to_string(path) {
-            base_url_ok = raw.contains("127.0.0.1") || raw.contains("model_provider = \"openai\"");
-            bridge_config_ok =
-                raw.contains("wire_api = \"responses\"") || raw.contains("model_provider = \"openai\"");
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&raw) {
+                let val = json.get("OPENAI_API_KEY").and_then(|v| v.as_str());
+                auth_key_matched = keys_match(expected_key, val);
+            }
         }
     }
 
-    let bridge_cfg = codex_bridge::get_codex_bridge_config();
-    let _ = bridge_cfg;
+    let config_path = codex_home.as_ref().map(|h| h.join("config.toml"));
+    let mut model_provider_ok = false;
+    let mut bridge_config_ok = false;
+    if let Some(path) = config_path.as_ref().filter(|p| p.exists()) {
+        if let Ok(raw) = fs::read_to_string(path) {
+            model_provider_ok = raw.contains("model_provider = ")
+                && !raw.contains("model_provider = \"openai\"");
+            bridge_config_ok = raw.contains("wire_api = \"responses\"")
+                || raw.contains("model_provider = \"vibestart-openai\"");
+        }
+    }
 
     let config_ok = config_path.as_ref().is_some_and(|p| p.exists());
-    let ready = key_matched && config_ok && bridge_config_ok;
+    let auth_ok = auth_key_matched || key_matched;
+    let ready = auth_ok && config_ok && model_provider_ok && bridge_config_ok;
     let mut manual_steps = vec![
-        "API Key 已同步到 ~/.codex，但桥接需在 CC Switch 或 DeepSeek 桥中单独配置 Key".into(),
-        "完成桥接配置并通过健康检查后，在终端运行 codex".into(),
+        format!(
+            "完全退出 Codex 桌面客户端后重新打开（{}）",
+            quit_app_hint()
+        ),
+        "若仍出现登录页，请选择「使用 API Key」或「Enter API key」".into(),
     ];
-    if !base_url_ok {
+    if !model_provider_ok {
         manual_steps.insert(
             0,
-            "config.toml 未指向 localhost 桥接，请重新同步 Codex 配置".into(),
+            "config.toml 缺少 model_provider，请在向导中重新同步 Codex".into(),
         );
+    }
+    if !auth_key_matched && key_matched {
+        manual_steps.push("auth.json 未写入，请重新同步以完成 API Key 登录".into());
     }
 
     IdeSyncVerifyItem {
         ide: "codex".into(),
         ide_name: "Codex".into(),
         ready,
-        key_matched,
-        base_url_ok: base_url_ok && bridge_config_ok,
+        key_matched: auth_ok,
+        base_url_ok: model_provider_ok && bridge_config_ok,
         custom_enabled: true,
         message: if ready {
-            "Codex 本地配置已写入（API Key 有效）".into()
-        } else if key_matched && config_ok {
-            "Key 已同步，桥接配置待完成".into()
+            "Codex 配置与 API Key 登录已就绪".into()
+        } else if auth_ok && config_ok && !model_provider_ok {
+            "Key 已同步，但 model_provider 配置缺失，请重新同步".into()
+        } else if auth_ok && config_ok {
+            "Key 已同步，请完全退出后重启 Codex".into()
         } else {
             "Codex 配置不完整，请重新同步".into()
         },

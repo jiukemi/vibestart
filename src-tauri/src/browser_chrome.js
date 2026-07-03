@@ -9,6 +9,37 @@
     nextId: 2,
   };
 
+  function invoke(cmd, payload) {
+    if (!window.__TAURI_INTERNALS__ || !window.__TAURI_INTERNALS__.invoke) {
+      return Promise.resolve(null);
+    }
+    return window.__TAURI_INTERNALS__.invoke(cmd, payload || {});
+  }
+
+  function applyRustState(rustState) {
+    if (!rustState || !rustState.tabs || !rustState.tabs.length) return;
+    state.tabs = rustState.tabs.map(function (t) {
+      return { id: t.id, url: t.url, title: t.title || "新标签页" };
+    });
+    state.activeId = rustState.active_id || rustState.tabs[0].id;
+    state.nextId = rustState.next_id || state.nextId;
+  }
+
+  function persistState() {
+    return invoke("browser_tabs_save", {
+      tabs: state.tabs,
+      active_id: state.activeId,
+      next_id: state.nextId,
+    }).catch(function () {});
+  }
+
+  function loadStateFromRust() {
+    return invoke("browser_tabs_get").then(function (rustState) {
+      applyRustState(rustState);
+      syncActiveTabFromPage();
+    });
+  }
+
   var style = document.createElement("style");
   style.textContent =
     "#vibestart-browser-chrome{position:fixed;top:0;left:0;right:0;z-index:2147483646;height:" +
@@ -97,7 +128,7 @@
     return state.tabs[0];
   }
 
-  function saveActiveTabFromPage() {
+  function syncActiveTabFromPage() {
     var tab = activeTab();
     if (!tab) return;
     tab.url = location.href;
@@ -143,6 +174,13 @@
     btnForward.disabled = false;
   }
 
+  function saveActiveTabFromPage() {
+    var tab = activeTab();
+    if (!tab) return;
+    tab.url = location.href;
+    tab.title = document.title || tab.title || "新标签页";
+  }
+
   function switchTab(id) {
     if (id === state.activeId) return;
     saveActiveTabFromPage();
@@ -153,7 +191,9 @@
     if (!tab) return;
     state.activeId = id;
     renderTabs();
-    location.assign(tab.url);
+    persistState().then(function () {
+      location.assign(tab.url);
+    });
   }
 
   function openTab(url, title) {
@@ -166,7 +206,9 @@
     });
     state.activeId = id;
     renderTabs();
-    location.assign(url);
+    persistState().then(function () {
+      location.assign(url);
+    });
   }
 
   function closeTab(id) {
@@ -182,9 +224,12 @@
       var next = state.tabs[Math.min(idx, state.tabs.length - 1)];
       state.activeId = next.id;
       renderTabs();
-      location.assign(next.url);
+      persistState().then(function () {
+        location.assign(next.url);
+      });
     } else {
       renderTabs();
+      persistState();
     }
   }
 
@@ -199,7 +244,9 @@
       state.activeId = existing.id;
       if (title) existing.title = title;
       renderTabs();
-      if (location.href !== url) location.assign(url);
+      persistState().then(function () {
+        if (location.href !== url) location.assign(url);
+      });
       return;
     }
     if (opts.newTab) {
@@ -213,7 +260,9 @@
     }
     state.activeId = tab ? tab.id : state.activeId;
     renderTabs();
-    if (location.href !== url) location.assign(url);
+    persistState().then(function () {
+      if (location.href !== url) location.assign(url);
+    });
   }
 
   btnBack.addEventListener("click", function () {
@@ -240,17 +289,20 @@
   window.addEventListener("popstate", function () {
     saveActiveTabFromPage();
     renderTabs();
+    persistState();
   });
 
   window.addEventListener("load", function () {
     saveActiveTabFromPage();
     renderTabs();
+    persistState();
   });
 
   document.addEventListener("visibilitychange", function () {
     if (!document.hidden) {
       saveActiveTabFromPage();
       renderTabs();
+      persistState();
     }
   });
 
@@ -290,6 +342,8 @@
     },
   };
 
-  mount();
-  renderTabs();
+  loadStateFromRust().finally(function () {
+    mount();
+    renderTabs();
+  });
 })();

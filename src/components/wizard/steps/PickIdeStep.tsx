@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { IdeRegisterGuidePanel } from "@/components/ide/IdeRegisterGuidePanel";
 import { CodexBridgePanel } from "@/components/codex/CodexBridgePanel";
 import { ToolsInstallDirPicker } from "@/components/tools/ToolsInstallDirPicker";
-import { CommandOutput } from "@/components/shared/CommandOutput";
+import { InstallProgressPanel } from "@/components/shared/InstallProgressPanel";
 import { LoadingOverlay, VibeStartLoading } from "@/components/shared/VibeStartLoading";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,8 +26,8 @@ import { StepShell } from "@/components/wizard/StepShell";
 import { useOsInfo } from "@/hooks/useOsInfo";
 import { installBackendLabel } from "@/lib/platform-ui";
 import { useTauriCommand } from "@/hooks/useTauriCommand";
+import { useInstallProgress } from "@/hooks/useInstallProgress";
 import { getIdeOption, getIdeScanKey, IDE_OPTIONS } from "@/lib/ide";
-import { needsCodexBridge } from "@/lib/codex-bridge";
 import { getStepMeta } from "@/lib/wizard-index";
 import type { CommandResult, ToolStatus } from "@/lib/tauri-types";
 import { useLoadingStore } from "@/stores/loadingStore";
@@ -42,7 +42,6 @@ const step = getStepMeta("pick-ide");
 export function PickIdeStep() {
   const { platform } = useOsInfo();
   const primaryIde = useWizardStore((s) => s.selections.primaryIde);
-  const llmProvider = useWizardStore((s) => s.selections.llmProvider);
   const setSelection = useWizardStore((s) => s.setSelection);
   const selected = primaryIde ?? "cursor";
   const selectedOption = getIdeOption(selected);
@@ -56,6 +55,8 @@ export function PickIdeStep() {
   } = useTauriCommand<ToolStatus[]>();
   const toolCommand = useTauriCommand<CommandResult>();
   const [installLog, setInstallLog] = useState<string | null>(null);
+  const { progress, streamLog } = useInstallProgress(toolCommand.loading);
+  const mergedInstallLog = [streamLog, installLog].filter(Boolean).join("\n\n");
   const [confirmUninstall, setConfirmUninstall] = useState(false);
   const [initialScanDone, setInitialScanDone] = useState(false);
 
@@ -122,6 +123,8 @@ export function PickIdeStep() {
   );
   const isBusy = scanLoading || toolCommand.loading;
   const showInitialLoading = !initialScanDone && !scanData;
+  const isCodex = selected === "codex";
+  const showIdeInstallCard = !canProceed && initialScanDone && !isCodex;
 
   return (
     <StepShell
@@ -194,7 +197,7 @@ export function PickIdeStep() {
         )}
       </div>
 
-      {!canProceed && initialScanDone && (
+      {showIdeInstallCard && (
         <Card size="sm">
           <CardHeader>
             <CardTitle className="text-base">
@@ -262,17 +265,25 @@ export function PickIdeStep() {
         </Card>
       )}
 
-      {(toolCommand.loading || installLog) && (
-        <CommandOutput
+      {(toolCommand.loading || mergedInstallLog || toolCommand.error) && (
+        <InstallProgressPanel
           loading={toolCommand.loading}
-          log={installLog ?? toolCommand.error}
+          progress={progress}
+          log={mergedInstallLog || toolCommand.error}
         />
       )}
 
-      {initialScanDone && <IdeRegisterGuidePanel ideId={selected} />}
+      {initialScanDone && !isCodex && (
+        <IdeRegisterGuidePanel ideId={selected} beforeLlmStep />
+      )}
 
-      {selected === "codex" && needsCodexBridge("codex", llmProvider) && (
-        <CodexBridgePanel llmProvider={llmProvider} />
+      {isCodex && initialScanDone && (
+        <CodexBridgePanel
+          llmProvider={null}
+          phase="pick-ide"
+          toolMap={toolMap}
+          onRescan={rescan}
+        />
       )}
 
       <Button

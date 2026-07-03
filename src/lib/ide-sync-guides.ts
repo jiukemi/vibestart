@@ -81,10 +81,13 @@ const BASE_GUIDES: Record<
   codex: {
     ide: "codex",
     title: "Codex",
-    autoNote: "Key 已写入 ~/.codex/.env 与 config.toml。",
+    autoNote:
+      "AI 中文回复已配置；界面汉化需点 Codex 流程第一步的「一键汉化」，或重新同步 LLM。完全退出后重启 Codex。",
     manualSteps: () => [
-      "打开终端，进入项目目录",
-      "运行 codex 开始编程",
+      "汉化入口：选择 IDE / LLM 步骤中的 Codex 面板 → 第一步「安装 Codex」旁的「一键汉化」",
+      "用 Cmd+Q（macOS）完全退出 Codex，重新打开",
+      "若菜单仍为英文：Codex → 设置 → General → Language → 中文（中国）",
+      "界面汉化需联网访问 OpenAI；国内若仍无效，属 Codex 客户端已知限制，AI 对话中文不受影响",
     ],
   },
   "tongyi-lingma": {

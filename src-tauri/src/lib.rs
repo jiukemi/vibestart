@@ -1,11 +1,13 @@
 mod browser;
 mod claude_code;
+mod codex_app;
 mod codex_bridge;
 mod config;
 mod deploy;
 mod env_scan;
 mod filesystem;
 mod ide_sync;
+mod install_progress;
 mod installer;
 mod llm;
 mod mirrors;
@@ -43,8 +45,10 @@ async fn scan_environment() -> Result<Vec<ToolStatus>, String> {
 }
 
 #[tauri::command]
-async fn install_tool(tool: String) -> Result<CommandResult, String> {
-    let result = tauri::async_runtime::spawn_blocking(move || installer::install_tool(&tool))
+async fn install_tool(app: AppHandle, tool: String) -> Result<CommandResult, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        installer::install_tool(&tool, Some(&app))
+    })
         .await
         .map_err(|e| format!("安装失败: {e}"))?;
     if result.success {
@@ -55,17 +59,23 @@ async fn install_tool(tool: String) -> Result<CommandResult, String> {
 }
 
 #[tauri::command]
-async fn upgrade_tool(tool: String) -> Result<CommandResult, String> {
-    tauri::async_runtime::spawn_blocking(move || installer::upgrade_tool(&tool))
+async fn upgrade_tool(app: AppHandle, tool: String) -> Result<CommandResult, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        installer::upgrade_tool(&tool, Some(&app))
+    })
         .await
-        .map_err(|e| format!("更新失败: {e}"))
+        .map_err(|e| format!("更新失败: {e}"))?;
+    Ok(result)
 }
 
 #[tauri::command]
-async fn uninstall_tool(tool: String) -> Result<CommandResult, String> {
-    tauri::async_runtime::spawn_blocking(move || installer::uninstall_tool(&tool))
+async fn uninstall_tool(app: AppHandle, tool: String) -> Result<CommandResult, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        installer::uninstall_tool(&tool, Some(&app))
+    })
         .await
-        .map_err(|e| format!("卸载失败: {e}"))
+        .map_err(|e| format!("卸载失败: {e}"))?;
+    Ok(result)
 }
 
 #[tauri::command]
@@ -380,12 +390,34 @@ fn open_cc_switch_app() -> Result<(), String> {
     codex_bridge::open_cc_switch_app()
 }
 
+#[tauri::command]
+async fn localize_codex_app(app: AppHandle) -> Result<CommandResult, String> {
+    install_progress::emit(
+        Some(&app),
+        "run",
+        "正在写入 Codex 中文配置…",
+        Some(30),
+    );
+    let result = tauri::async_runtime::spawn_blocking(codex_app::localize_codex_app)
+        .await
+        .map_err(|e| format!("汉化失败: {e}"))?;
+    install_progress::finish(Some(&app), result.success);
+    if result.success {
+        Ok(result)
+    } else {
+        Err(result.log)
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .manage(browser::BrowserShellState(std::sync::Mutex::new(
+            browser::BrowserTabState::default(),
+        )))
         .invoke_handler(tauri::generate_handler![
             greet,
             get_os_info,
@@ -438,6 +470,9 @@ pub fn run() {
             check_codex_bridge_health,
             start_deepseek_bridge,
             open_cc_switch_app,
+            localize_codex_app,
+            browser::browser_tabs_get,
+            browser::browser_tabs_save,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

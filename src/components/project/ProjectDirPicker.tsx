@@ -19,6 +19,8 @@ interface ProjectDirPickerProps {
   onChange: (dir: string) => void;
   onDirChanged?: () => void;
   className?: string;
+  /** 已有项目部署轨：不要求选模板 */
+  deployOnly?: boolean;
 }
 
 export function ProjectDirPicker({
@@ -26,6 +28,7 @@ export function ProjectDirPicker({
   onChange,
   onDirChanged,
   className,
+  deployOnly = false,
 }: ProjectDirPickerProps) {
   const [editing, setEditing] = useState(!value);
   const [status, setStatus] = useState<ProjectDirStatus | null>(null);
@@ -73,7 +76,9 @@ export function ProjectDirPicker({
           第一步：选择项目文件夹
         </CardTitle>
         <CardDescription>
-          在下方浏览你的个人目录，选好后即可选模板。模板文件只会补充缺失项，不会覆盖已有文件。
+          {deployOnly
+            ? "选择已在别处开发好的 demo 文件夹，需包含可部署的 index.html。"
+            : "在下方浏览你的个人目录，选好后即可选模板。模板文件只会补充缺失项，不会覆盖已有文件。"}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

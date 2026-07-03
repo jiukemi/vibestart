@@ -35,7 +35,7 @@ export const IDE_OPTIONS = [
   {
     id: "codex",
     name: "Codex",
-    description: "OpenAI 终端代码助手",
+    description: "OpenAI Codex 桌面客户端（图形界面，推荐）",
     installTool: "codex",
     promptLabel: "Codex",
     scanKey: "codex",

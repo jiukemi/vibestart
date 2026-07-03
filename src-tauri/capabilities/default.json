@@ -5,6 +5,7 @@
   "windows": [
     "main",
     "browser-*",
+    "vibestart-browser",
     "github-browser",
     "gitee-browser"
   ],

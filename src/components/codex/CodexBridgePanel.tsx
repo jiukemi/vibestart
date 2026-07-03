@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  Circle,
   ExternalLink,
   Loader2,
   Play,
@@ -11,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { CommandOutput } from "@/components/shared/CommandOutput";
+import { InstallProgressPanel } from "@/components/shared/InstallProgressPanel";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -22,15 +24,23 @@ import {
 import { useOpenInAppBrowser } from "@/hooks/useOpenInAppBrowser";
 import { useOsInfo } from "@/hooks/useOsInfo";
 import { useTauriCommand } from "@/hooks/useTauriCommand";
+import { useInstallProgress } from "@/hooks/useInstallProgress";
 import {
-  bridgeOptionForProvider,
-  CC_SWITCH_GUIDE_STEPS,
-  CODEX_BRIDGE_OPTIONS,
-  DEEPSEEK_BRIDGE_GUIDE_STEPS,
+  listBridgeOptionsForProvider,
   type CodexBridgeMode,
 } from "@/lib/codex-bridge";
+import {
+  codexFlowSummary,
+  computeCodexFlowSteps,
+  type CodexFlowAction,
+  type CodexWizardPhase,
+} from "@/lib/codex-flow";
 import { selectableCardClasses } from "@/lib/selectable-card";
-import type { CodexBridgeHealth, CommandResult } from "@/lib/tauri-types";
+import type {
+  CodexBridgeHealth,
+  CommandResult,
+  ToolStatus,
+} from "@/lib/tauri-types";
 import { useWizardStore } from "@/stores/wizardStore";
 import { cn } from "@/lib/utils";
 
@@ -42,13 +52,23 @@ const MANUAL_LINKS = {
 
 interface CodexBridgePanelProps {
   llmProvider: string | null;
-  /** 紧凑模式：仅显示状态条 */
+  /** 向导阶段：pick-ide 仅安装；llm-api-key 启动桥接 */
+  phase?: CodexWizardPhase;
+  /** 父级已扫描时传入，避免重复请求 */
+  toolMap?: Map<string, ToolStatus>;
+  onRescan?: () => void | Promise<void>;
+  /** LLM 步骤 Key 是否已验证 */
+  apiKeyReady?: boolean;
   compact?: boolean;
   className?: string;
 }
 
 export function CodexBridgePanel({
   llmProvider,
+  phase = "pick-ide",
+  toolMap: toolMapProp,
+  onRescan,
+  apiKeyReady = false,
   compact = false,
   className,
 }: CodexBridgePanelProps) {
@@ -58,6 +78,8 @@ export function CodexBridgePanel({
 
   const [installLog, setInstallLog] = useState<string | null>(null);
   const [startLog, setStartLog] = useState<string | null>(null);
+  const [configLoaded, setConfigLoaded] = useState(false);
+  const modeInitializedRef = useRef(false);
 
   const { run: loadConfig, data: savedConfig } =
     useTauriCommand<{
@@ -65,83 +87,163 @@ export function CodexBridgePanel({
       cc_switch_port: number;
       deepseek_bridge_port: number;
     }>();
-  const saveConfigCmd = useTauriCommand<void>();
-  const healthCmd = useTauriCommand<CodexBridgeHealth>();
+  const { run: saveConfig } = useTauriCommand<void>();
+  const {
+    run: runHealthCheck,
+    loading: healthLoading,
+    data: health,
+  } = useTauriCommand<CodexBridgeHealth>();
+  const { run: runScan, data: scanData } = useTauriCommand<ToolStatus[]>();
   const installCmd = useTauriCommand<CommandResult>();
   const startBridgeCmd = useTauriCommand<CommandResult>();
   const openCcSwitchCmd = useTauriCommand<void>();
+  const installCodexCmd = useTauriCommand<CommandResult>();
+  const localizeCodexCmd = useTauriCommand<CommandResult>();
 
   const { open: openBrowser, openGuide } = useOpenInAppBrowser();
 
   const mode: CodexBridgeMode = codexBridgeMode ?? "cc-switch";
 
-  const visibleOptions = useMemo(
-    () =>
-      CODEX_BRIDGE_OPTIONS.filter((opt) => {
-        if (opt.providerLimit && llmProvider !== opt.providerLimit) {
-          return false;
-        }
-        return true;
-      }),
-    [llmProvider],
-  );
-
-  const selectedOption =
-    CODEX_BRIDGE_OPTIONS.find((o) => o.id === mode) ?? CODEX_BRIDGE_OPTIONS[0];
-
-  const guideSteps =
-    mode === "deepseek-bridge"
-      ? DEEPSEEK_BRIDGE_GUIDE_STEPS
-      : CC_SWITCH_GUIDE_STEPS;
+  const toolMap = useMemo(() => {
+    if (toolMapProp) return toolMapProp;
+    return new Map(scanData?.map((t) => [t.name, t]) ?? []);
+  }, [toolMapProp, scanData]);
 
   const refreshHealth = useCallback(async () => {
-    await healthCmd.run("check_codex_bridge_health", { mode });
-  }, [healthCmd, mode]);
+    await runHealthCheck("check_codex_bridge_health", { mode });
+  }, [runHealthCheck, mode]);
+
+  const rescanAll = useCallback(async () => {
+    if (onRescan) {
+      await onRescan();
+    } else {
+      await runScan("scan_environment");
+    }
+    await refreshHealth();
+  }, [onRescan, refreshHealth, runScan]);
 
   const persistMode = useCallback(
     async (nextMode: CodexBridgeMode) => {
       setSelection("codexBridgeMode", nextMode);
-      await saveConfigCmd.run("save_codex_bridge_config", { mode: nextMode });
-      await refreshHealth();
+      await saveConfig("save_codex_bridge_config", { mode: nextMode });
+      await runHealthCheck("check_codex_bridge_health", { mode: nextMode });
     },
-    [refreshHealth, saveConfigCmd, setSelection],
+    [runHealthCheck, saveConfig, setSelection],
   );
 
   useEffect(() => {
-    void loadConfig("get_codex_bridge_config");
+    void loadConfig("get_codex_bridge_config").finally(() => setConfigLoaded(true));
   }, [loadConfig]);
 
   useEffect(() => {
-    if (savedConfig?.mode) {
-      const m = savedConfig.mode as CodexBridgeMode;
-      if (m !== codexBridgeMode) {
-        setSelection("codexBridgeMode", m);
-      }
+    if (!toolMapProp) {
+      void runScan("scan_environment");
     }
-  }, [codexBridgeMode, savedConfig?.mode, setSelection]);
+  }, [runScan, toolMapProp]);
 
+  /** 仅从磁盘配置初始化一次，避免用户切换后被旧 savedConfig 覆盖 */
   useEffect(() => {
-    if (llmProvider && !codexBridgeMode) {
-      const suggested = bridgeOptionForProvider(llmProvider);
-      if (suggested !== "none") {
-        void persistMode(suggested);
-      }
+    if (!configLoaded || modeInitializedRef.current) return;
+    modeInitializedRef.current = true;
+
+    const available = listBridgeOptionsForProvider(llmProvider);
+    const saved = savedConfig?.mode as CodexBridgeMode | undefined;
+    const savedOk = saved && available.some((o) => o.id === saved);
+
+    if (savedOk) {
+      setSelection("codexBridgeMode", saved);
+    } else if (codexBridgeMode && available.some((o) => o.id === codexBridgeMode)) {
+      return;
+    } else if (!codexBridgeMode) {
+      void persistMode("cc-switch");
     }
-  }, [codexBridgeMode, llmProvider, persistMode]);
+  }, [
+    configLoaded,
+    codexBridgeMode,
+    llmProvider,
+    persistMode,
+    savedConfig?.mode,
+    setSelection,
+  ]);
+
+  /** LLM 选定后，DeepSeek 默认轻量桥；用户仍可改选 CC Switch */
+  useEffect(() => {
+    if (!configLoaded || !llmProvider) return;
+    const available = listBridgeOptionsForProvider(llmProvider);
+    if (available.length === 0) return;
+    const current = codexBridgeMode ?? mode;
+    if (!available.some((o) => o.id === current)) {
+      void persistMode(available[0]!.id);
+      return;
+    }
+    if (
+      llmProvider === "deepseek" &&
+      phase === "llm-api-key" &&
+      !codexBridgeMode &&
+      !savedConfig?.mode
+    ) {
+      void persistMode("deepseek-bridge");
+    }
+  }, [
+    configLoaded,
+    codexBridgeMode,
+    llmProvider,
+    mode,
+    persistMode,
+    phase,
+    savedConfig?.mode,
+  ]);
 
   useEffect(() => {
     void refreshHealth();
-  }, [refreshHealth]);
+  }, [mode, refreshHealth]);
 
-  const installTool = async () => {
+  const flowSteps = useMemo(
+    () =>
+      computeCodexFlowSteps({
+        mode,
+        phase,
+        toolMap,
+        bridgeReady: Boolean(health?.ready),
+        apiKeyReady,
+        llmProvider,
+      }),
+    [apiKeyReady, health?.ready, llmProvider, mode, phase, toolMap],
+  );
+
+  const summary = codexFlowSummary(flowSteps);
+  const activeStep = flowSteps.find((s) => s.status === "active");
+
+  const installBridgeTool = async () => {
     setInstallLog(null);
     const tool = mode === "deepseek-bridge" ? "codex-bridge" : "cc-switch";
     const result = await installCmd.run("install_tool", { tool });
     if (result) {
       setInstallLog(result.log);
-      setTimeout(() => void refreshHealth(), 2000);
+      setTimeout(() => void rescanAll(), 1500);
     } else if (installCmd.error) {
       setInstallLog(installCmd.error);
+    }
+  };
+
+  const installCodexApp = async () => {
+    setInstallLog(null);
+    const result = await installCodexCmd.run("install_tool", { tool: "codex" });
+    if (result) {
+      setInstallLog(result.log);
+      setTimeout(() => void rescanAll(), 1500);
+    } else if (installCodexCmd.error) {
+      setInstallLog(installCodexCmd.error);
+    }
+  };
+
+  const localizeCodexApp = async () => {
+    setInstallLog(null);
+    const result = await localizeCodexCmd.run("localize_codex_app");
+    if (result) {
+      setInstallLog(result.log);
+    } else if (localizeCodexCmd.error) {
+      setInstallLog(localizeCodexCmd.error);
     }
   };
 
@@ -156,8 +258,46 @@ export function CodexBridgePanel({
     }
   };
 
-  const health = healthCmd.data;
-  const healthLoading = healthCmd.loading;
+  const runFlowAction = (action: CodexFlowAction) => {
+    switch (action) {
+      case "install-codex":
+        void installCodexApp();
+        break;
+      case "localize-codex":
+        void localizeCodexApp();
+        break;
+      case "install-bridge":
+        void installBridgeTool();
+        break;
+      case "start-bridge":
+        void startBridge();
+        break;
+      case "open-cc-switch":
+        void openCcSwitchCmd.run("open_cc_switch_app");
+        break;
+      case "refresh-health":
+        void refreshHealth();
+        break;
+    }
+  };
+
+  const visibleOptions = useMemo(
+    () => listBridgeOptionsForProvider(llmProvider),
+    [llmProvider],
+  );
+
+  const canPickMode = visibleOptions.length > 1;
+
+  const actionBusy =
+    installCmd.loading ||
+    installCodexCmd.loading ||
+    localizeCodexCmd.loading ||
+    startBridgeCmd.loading;
+
+  const progressActive =
+    installCmd.loading || installCodexCmd.loading || localizeCodexCmd.loading;
+  const { progress, streamLog } = useInstallProgress(progressActive);
+  const mergedInstallLog = [streamLog, installLog].filter(Boolean).join("\n\n");
 
   if (compact) {
     return (
@@ -183,7 +323,7 @@ export function CodexBridgePanel({
           variant="ghost"
           size="sm"
           disabled={healthLoading}
-          onClick={() => void refreshHealth()}
+          onClick={() => void rescanAll()}
         >
           {healthLoading ? (
             <Loader2 className="size-3.5 animate-spin" />
@@ -201,126 +341,192 @@ export function CodexBridgePanel({
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <Route className="size-4 text-primary" />
-          Codex 国产模型桥接
+          Codex 配置清单
         </CardTitle>
         <CardDescription>
-          Codex 使用 Responses 协议，国产 API 需经本地桥接。VibeStart
-          会写入 localhost 配置；Key 还需在 CC Switch 或 bridge 中再填一次。
+          Codex 比其它 IDE 步骤更多：按顺序完成安装与桥接。选 OpenAI 官方 API
+          可在 LLM 步骤跳过桥接。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-2 sm:grid-cols-2">
-          {visibleOptions.map((opt) => {
-            const isSelected = mode === opt.id;
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => void persistMode(opt.id)}
-                className="text-left"
-              >
-                <div
-                  className={cn(
-                    "rounded-xl border border-border bg-card p-3 transition-colors",
-                    selectableCardClasses(isSelected),
-                  )}
+        {canPickMode ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {visibleOptions.map((opt) => {
+              const isSelected = mode === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  aria-pressed={isSelected}
+                  onClick={() => void persistMode(opt.id)}
+                  className="text-left"
                 >
-                  <p className="text-sm font-medium text-foreground">
-                    {opt.title}
-                    {opt.recommended && (
-                      <span className="ml-1 text-xs font-normal text-muted-foreground">
-                        推荐
-                      </span>
+                  <div
+                    className={cn(
+                      "rounded-xl border border-border bg-card p-3 transition-colors",
+                      selectableCardClasses(isSelected),
                     )}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {opt.description}
-                  </p>
+                  >
+                    <p className="text-sm font-medium text-foreground">
+                      {opt.title}
+                      {opt.recommended && (
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">
+                          推荐
+                        </span>
+                      )}
+                      {isSelected && (
+                        <span className="ml-1 text-xs font-normal text-primary">
+                          已选
+                        </span>
+                      )}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {opt.description}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : visibleOptions[0] ? (
+          <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground dark:bg-muted/20">
+            桥接方式：
+            <span className="font-medium text-foreground">
+              {visibleOptions[0].title}
+            </span>
+            （当前 LLM 仅支持此方式）
+          </p>
+        ) : null}
+
+        {summary && (
+          <div
+            className={cn(
+              "rounded-lg border px-3 py-2 text-sm",
+              flowSteps.every((s) => s.status === "done")
+                ? "border-emerald-500/40 bg-emerald-500/5 dark:bg-emerald-500/10"
+                : "border-primary/30 bg-primary/5 dark:bg-primary/10",
+            )}
+          >
+            <p className="font-medium text-foreground">{summary}</p>
+          </div>
+        )}
+
+        <ol className="space-y-3">
+          {flowSteps.map((step) => {
+            const isActive = step.status === "active";
+            const isDone = step.status === "done";
+            return (
+              <li
+                key={step.id}
+                className={cn(
+                  "flex gap-3 rounded-lg border p-3 text-sm transition-colors",
+                  isActive
+                    ? "border-primary/40 bg-primary/5 dark:bg-primary/10"
+                    : isDone
+                      ? "border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/10"
+                      : "border-border bg-muted/20 opacity-80 dark:bg-muted/10",
+                )}
+              >
+                <span className="mt-0.5 shrink-0">
+                  {isDone ? (
+                    <CheckCircle2 className="size-5 text-emerald-600 dark:text-emerald-400" />
+                  ) : isActive ? (
+                    <span className="flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                      →
+                    </span>
+                  ) : (
+                    <Circle className="size-5 text-muted-foreground" />
+                  )}
+                </span>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div>
+                    <p className="font-medium text-foreground">{step.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {step.description}
+                    </p>
+                  </div>
+                  {((isActive && step.action) ||
+                    (step.secondaryAction &&
+                      (isDone || isActive))) && (
+                    <div className="flex flex-wrap gap-2">
+                      {isActive && step.action && step.actionLabel && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={actionBusy}
+                          onClick={() => runFlowAction(step.action!)}
+                        >
+                          {actionBusy ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : step.action === "start-bridge" ? (
+                            <Play className="size-4" />
+                          ) : (
+                            <Zap className="size-4" />
+                          )}
+                          {step.actionLabel}
+                        </Button>
+                      )}
+                      {step.secondaryAction && step.secondaryActionLabel && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={isDone ? "default" : "outline"}
+                          disabled={actionBusy}
+                          onClick={() => runFlowAction(step.secondaryAction!)}
+                        >
+                          {localizeCodexCmd.loading &&
+                          step.secondaryAction === "localize-codex" ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Zap className="size-4" />
+                          )}
+                          {step.secondaryActionLabel}
+                        </Button>
+                      )}
+                      {step.action === "refresh-health" && (
+                        <span className="self-center text-xs text-muted-foreground">
+                          {health?.message}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </button>
+              </li>
             );
           })}
-        </div>
+        </ol>
 
-        <div
-          className={cn(
-            "flex flex-wrap items-start gap-2 rounded-lg border px-3 py-2 text-sm",
-            health?.ready
-              ? "border-emerald-500/40 bg-emerald-500/5 dark:bg-emerald-500/10"
-              : "border-amber-500/40 bg-amber-500/5 dark:bg-amber-500/10",
-          )}
-        >
-          {healthLoading ? (
-            <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
-          ) : health?.ready ? (
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-          ) : (
+        {activeStep && !activeStep.action && health && !health.ready && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm dark:bg-amber-500/10">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="font-medium text-foreground">
-              {health?.ready ? "桥接就绪" : "桥接未就绪（可继续向导，启动 Codex 前请完成）"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {health?.message ??
-                `检测 ${selectedOption.defaultPort} 端口…`}
-            </p>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-foreground">桥接状态</p>
+              <p className="text-xs text-muted-foreground">{health.message}</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={healthLoading}
+              onClick={() => void refreshHealth()}
+            >
+              <RefreshCw className="size-3.5" />
+              重新检测
+            </Button>
           </div>
+        )}
+
+        <div className="flex flex-wrap gap-2 border-t border-border pt-3">
           <Button
             type="button"
             variant="outline"
             size="sm"
             disabled={healthLoading}
-            onClick={() => void refreshHealth()}
+            onClick={() => void rescanAll()}
           >
-            <RefreshCw className="size-3.5" />
-            重新检测
+            <RefreshCw className="size-4" />
+            重新扫描环境
           </Button>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            disabled={installCmd.loading}
-            onClick={() => void installTool()}
-          >
-            {installCmd.loading ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Zap className="size-4" />
-            )}
-            {mode === "deepseek-bridge"
-              ? "一键安装 DeepSeek 桥"
-              : "一键安装 CC Switch"}
-          </Button>
-          {mode === "deepseek-bridge" && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={startBridgeCmd.loading}
-              onClick={() => void startBridge()}
-            >
-              {startBridgeCmd.loading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Play className="size-4" />
-              )}
-              启动 DeepSeek 桥
-            </Button>
-          )}
-          {mode === "cc-switch" && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={openCcSwitchCmd.loading}
-              onClick={() => void openCcSwitchCmd.run("open_cc_switch_app")}
-            >
-              打开 CC Switch
-            </Button>
-          )}
           <Button
             type="button"
             variant="ghost"
@@ -335,7 +541,7 @@ export function CodexBridgePanel({
             }
           >
             <ExternalLink className="size-4" />
-            应用内打开说明页
+            说明文档
           </Button>
           <Button
             type="button"
@@ -359,10 +565,21 @@ export function CodexBridgePanel({
           </Button>
         </div>
 
-        {(installLog || installCmd.error) && (
-          <CommandOutput
-            loading={installCmd.loading}
-            log={installLog ?? installCmd.error ?? undefined}
+        {(progressActive ||
+          mergedInstallLog ||
+          installCmd.error ||
+          installCodexCmd.error ||
+          localizeCodexCmd.error) && (
+          <InstallProgressPanel
+            loading={progressActive}
+            progress={progress}
+            log={
+              mergedInstallLog ||
+              installCmd.error ||
+              installCodexCmd.error ||
+              localizeCodexCmd.error ||
+              null
+            }
           />
         )}
         {(startLog || startBridgeCmd.error) && (
@@ -372,33 +589,10 @@ export function CodexBridgePanel({
           />
         )}
 
-        <ol className="space-y-3 border-t border-border pt-3">
-          {guideSteps.map((step, index) => (
-            <li key={step.id} className="flex gap-3 text-sm">
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-                {index + 1}
-              </span>
-              <div>
-                <p className="font-medium text-foreground">{step.title}</p>
-                <p className="text-xs text-muted-foreground">{step.body}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-
         {platform === "windows" && mode === "cc-switch" && (
           <p className="text-xs text-muted-foreground">
-            winget 安装失败时，可从{" "}
-            <button
-              type="button"
-              className="text-primary underline-offset-2 hover:underline"
-              onClick={() =>
-                void openGuide(MANUAL_LINKS.ccSwitchGithub, "CC Switch · GitHub")
-              }
-            >
-              GitHub Releases
-            </button>{" "}
-            下载；也可在 Gitee 镜像 Release 中应用内打开下载页。
+            winget 安装失败时，可从 GitHub Releases 或 Gitee 镜像手动下载 CC
+            Switch。
           </p>
         )}
       </CardContent>

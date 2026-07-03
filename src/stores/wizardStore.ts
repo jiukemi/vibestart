@@ -8,6 +8,7 @@ import {
   getNextVisibleStepIndex,
   getPrevVisibleStepIndex,
   migrateWizardStepIndex,
+  migrateWizardStepIndexV9,
 } from "@/lib/wizard-flow";
 import { wizardStepIndex } from "@/lib/wizard-index";
 
@@ -20,7 +21,11 @@ export type AppStack = "hybrid" | "native";
 /** express = 极速轨（默认）；full = 完整 9 步含 IDE / Git */
 export type WizardTrack = "express" | "full";
 
+/** fresh = 从零向导；deploy-only = 已有项目，直接部署 */
+export type UserIntent = "fresh" | "deploy-only";
+
 export interface WizardSelections {
+  userIntent: UserIntent;
   wizardTrack: WizardTrack;
   buildGoal: BuildGoal | null;
   appStack: AppStack | null;
@@ -68,11 +73,12 @@ interface WizardState {
 }
 
 const defaultSelections: WizardSelections = {
+  userIntent: "fresh",
   wizardTrack: "express",
   buildGoal: null,
   appStack: null,
   primaryIde: "cursor",
-  llmProvider: "deepseek",
+  llmProvider: null,
   packId: null,
   gitProvider: "skip",
   deployTarget: "vercel",
@@ -94,6 +100,7 @@ function mergeSelections(
     ...defaultSelections,
     ...partial,
     llmSyncTargets: partial?.llmSyncTargets ?? [],
+    userIntent: partial?.userIntent ?? defaultSelections.userIntent,
     wizardTrack: partial?.wizardTrack ?? defaultSelections.wizardTrack,
     backendAssistEnabled:
       partial?.backendAssistEnabled ?? defaultSelections.backendAssistEnabled,
@@ -250,7 +257,7 @@ export const useWizardStore = create<WizardState>()(
     }),
     {
       name: "vibestart-wizard",
-      version: 7,
+      version: 10,
       migrate: (persistedState, fromVersion) => {
         const state = persistedState as Partial<WizardState>;
         const maxStep = WIZARD_STEPS.length - 1;
@@ -308,6 +315,33 @@ export const useWizardStore = create<WizardState>()(
             if (!state.selections.primaryIde) {
               state.selections.primaryIde = "cursor";
             }
+          }
+        }
+
+        if (fromVersion < 8 && state.selections) {
+          const llmStepIdx = wizardStepIndex("llm-api-key");
+          const completed = state.completedSteps ?? [];
+          if (!completed.includes(llmStepIdx)) {
+            state.selections.llmProvider = null;
+          }
+        }
+
+        if (fromVersion < 10 && state.selections) {
+          if (!state.selections.userIntent) {
+            state.selections.userIntent = "fresh";
+          }
+        }
+
+        if (fromVersion < 9) {
+          if (typeof state.currentStep === "number") {
+            state.currentStep = migrateWizardStepIndexV9(state.currentStep);
+          }
+          if (Array.isArray(state.completedSteps)) {
+            state.completedSteps = [
+              ...new Set(
+                state.completedSteps.map((i) => migrateWizardStepIndexV9(i)),
+              ),
+            ];
           }
         }
 

@@ -242,7 +242,7 @@ fn ide_launch_meta(ide: &str) -> (&'static str, bool, Option<&'static str>, Opti
         "windsurf" => ("Windsurf", false, Some("Windsurf"), None),
         "tongyi-lingma" => ("通义灵码", false, Some("Lingma"), None),
         "claude-code" => ("Claude Code", true, None, Some("claude")),
-        "codex" => ("Codex", true, None, Some("codex")),
+        "codex" => ("Codex", false, Some("Codex"), None),
         _ => ("Cursor", false, Some("Cursor"), None),
     }
 }
@@ -270,12 +270,8 @@ fn launch_ide_new(ide: &str, project_dir: Option<&str>) -> Result<(), String> {
             }
         }
         "codex" => {
-            if which_available("codex") {
-                let dir = resolve_cli_project_dir(project_dir);
-                launch_interactive_cli("codex", &dir)
-            } else {
-                Err("未检测到 Codex".into())
-            }
+            let dir = resolve_cli_project_dir(project_dir);
+            crate::codex_app::launch_codex_app(Some(&dir))
         }
         _ => launch_gui_app_new_instance("Cursor", "cursor"),
     }
@@ -501,10 +497,13 @@ fn open_in_claude_code(project_dir: &str) -> Result<(), String> {
 }
 
 fn open_in_codex(project_dir: &str) -> Result<(), String> {
+    if crate::codex_app::codex_app_installed() {
+        return crate::codex_app::launch_codex_app(Some(project_dir));
+    }
     if which_available("codex") {
         return launch_interactive_cli("codex", project_dir);
     }
-    Err("未检测到 Codex（codex 命令）。请在上一步点击「一键安装 Codex」。".into())
+    Err("未检测到 Codex 桌面客户端。请在一键安装 Codex 或从官方下载页安装。".into())
 }
 
 fn which_available(cmd: &str) -> bool {

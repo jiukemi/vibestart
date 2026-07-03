@@ -19,7 +19,7 @@ export const WIZARD_STEPS: WizardStep[] = [
   {
     id: "welcome",
     title: "欢迎",
-    description: "选择极速或完整向导，开始 VibeStart",
+    description: "从零开始，或已有项目直接部署上线",
   },
   {
     id: "choose-goal",
@@ -37,14 +37,14 @@ export const WIZARD_STEPS: WizardStep[] = [
     description: "选择你主要使用的 AI 编程工具",
   },
   {
-    id: "git-hosting",
-    title: "Git 托管",
-    description: "Gitee / GitHub 注册、建仓库、SSH；也可跳过仅用 Vercel",
-  },
-  {
     id: "llm-api-key",
     title: "LLM API Key",
     description: "获取 API Key、验证连接，并可选同步到已安装的编辑器",
+  },
+  {
+    id: "git-hosting",
+    title: "Git 托管",
+    description: "Gitee / GitHub 注册、建仓库、SSH；也可跳过仅用 Vercel",
   },
   {
     id: "first-project",
@@ -54,7 +54,7 @@ export const WIZARD_STEPS: WizardStep[] = [
   {
     id: "deploy",
     title: "部署上线",
-    description: "将网页部署到 Vercel（约 30 秒获得分享链接）",
+    description: "部署到 Gitee Pages（国内推荐）或 Vercel",
   },
   {
     id: "complete",

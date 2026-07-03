@@ -5,7 +5,9 @@ use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
+use tauri::AppHandle;
 
 const CODEX_BRIDGE_GITHUB: &str = "https://github.com/xiaoshaoning/codex-bridge.git";
 pub const CC_SWITCH_DEFAULT_PORT: u16 = 15721;
@@ -60,40 +62,59 @@ pub fn port_for_mode(cfg: &CodexBridgeConfig, mode: CodexBridgeMode) -> u16 {
     }
 }
 
+pub fn build_codex_openai_config_toml(model: &str) -> String {
+    format!(
+        r#"cli_auth_credentials_store = "file"
+model = "{model}"
+model_provider = "vibestart-openai"
+
+{}
+[model_providers.vibestart-openai]
+name = "VibeStart OpenAI"
+base_url = "https://api.openai.com/v1"
+wire_api = "responses"
+requires_openai_auth = false
+env_key = "OPENAI_API_KEY"
+"#,
+        crate::codex_app::codex_locale_sections()
+    )
+}
+
 pub fn build_codex_config_toml(mode: CodexBridgeMode, model: &str, port: u16) -> String {
+    let locale = crate::codex_app::codex_locale_sections();
+    let dev_instructions = r#"developer_instructions = "请用简体中文与用户交流。除非用户要求英文，否则解释、计划、总结均使用中文。"
+"#;
     match mode {
         CodexBridgeMode::CcSwitch => format!(
-            r#"# CC Switch 模式 · 由 VibeStart 生成
+            r#"cli_auth_credentials_store = "file"
 model = "{model}"
 model_provider = "vibestart-bridge"
-
-[model_providers.vibestart-bridge]
+{dev_instructions}
+{locale}[model_providers.vibestart-bridge]
 name = "VibeStart via CC Switch"
 base_url = "http://127.0.0.1:{port}/v1"
 wire_api = "responses"
 requires_openai_auth = false
 env_key = "OPENAI_API_KEY"
-
-developer_instructions = "请用简体中文与用户交流。除非用户要求英文，否则解释、计划、总结均使用中文。"
 "#
         ),
         CodexBridgeMode::DeepseekBridge => format!(
-            r#"# DeepSeek 轻量桥模式 · 由 VibeStart 生成
+            r#"cli_auth_credentials_store = "file"
 model = "{model}"
 model_provider = "deepseek"
-
-[model_providers.deepseek]
+{dev_instructions}
+{locale}[model_providers.deepseek]
 name = "DeepSeek via VibeStart Bridge"
 base_url = "http://127.0.0.1:{port}/v1"
 wire_api = "responses"
 requires_openai_auth = false
 supports_websockets = false
 env_key = "OPENAI_API_KEY"
-
-developer_instructions = "请用简体中文与用户交流。除非用户要求英文，否则解释、计划、总结均使用中文。"
 "#
         ),
-        CodexBridgeMode::None => String::new(),
+        CodexBridgeMode::None => format!(
+            "cli_auth_credentials_store = \"file\"\n\n{locale}"
+        ),
     }
 }
 
@@ -164,6 +185,16 @@ pub async fn check_health(mode: CodexBridgeMode, port: u16) -> CodexBridgeHealth
                 }
             }
         }
+        Ok(resp) if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
+            && mode == CodexBridgeMode::DeepseekBridge =>
+        {
+            CodexBridgeHealth {
+                mode: mode_str,
+                ready: true,
+                port,
+                message: "DeepSeek 桥接服务已就绪".into(),
+            }
+        }
         Ok(resp) => CodexBridgeHealth {
             mode: mode_str,
             ready: false,
@@ -187,7 +218,7 @@ pub async fn check_health(mode: CodexBridgeMode, port: u16) -> CodexBridgeHealth
     }
 }
 
-pub fn install_deepseek_bridge() -> CommandResult {
+pub fn install_deepseek_bridge(app: Option<&AppHandle>) -> CommandResult {
     let dir = match bridge_dir() {
         Ok(d) => d,
         Err(e) => {
@@ -221,13 +252,13 @@ pub fn install_deepseek_bridge() -> CommandResult {
     if !dir.join("package.json").exists() {
         if let Some(url) = mirrors::codex_bridge_prebuilt_url() {
             log.push_str(&format!("正在从 Gitee 下载预构建包…\n{url}\n\n"));
-            match install_from_gitee_zip(&url, &dir, true) {
+            match install_from_gitee_zip(app, &url, &dir, true) {
                 Ok(()) => log.push_str("预构建包解压完成。\n"),
                 Err(e) => {
                     log.push_str(&format!("Gitee 预构建包失败: {e}\n\n"));
                     if let Some(src_url) = mirrors::codex_bridge_source_url() {
                         log.push_str(&format!("尝试 Gitee 源码包…\n{src_url}\n\n"));
-                        match install_from_gitee_zip(&src_url, &dir, false) {
+                        match install_from_gitee_zip(app, &src_url, &dir, false) {
                             Ok(()) => log.push_str("源码包解压完成。\n"),
                             Err(e2) => {
                                 log.push_str(&format!("Gitee 源码包失败: {e2}\n\n"));
@@ -242,7 +273,7 @@ pub fn install_deepseek_bridge() -> CommandResult {
         } else if let Some(src_url) = mirrors::codex_bridge_source_url() {
             log.push_str("未配置 Gitee 预构建包 URL，尝试源码包…\n");
             log.push_str(&format!("{src_url}\n\n"));
-            match install_from_gitee_zip(&src_url, &dir, false) {
+            match install_from_gitee_zip(app, &src_url, &dir, false) {
                 Ok(()) => log.push_str("源码包解压完成。\n"),
                 Err(e) => {
                     log.push_str(&format!("Gitee 源码包失败: {e}\n\n"));
@@ -310,7 +341,12 @@ pub fn install_deepseek_bridge() -> CommandResult {
     }
 }
 
-fn install_from_gitee_zip(url: &str, dir: &Path, prebuilt: bool) -> Result<(), String> {
+fn install_from_gitee_zip(
+    app: Option<&AppHandle>,
+    url: &str,
+    dir: &Path,
+    prebuilt: bool,
+) -> Result<(), String> {
     let tmp = std::env::temp_dir().join(format!(
         "vibestart-codex-bridge-{}.zip",
         std::time::SystemTime::now()
@@ -318,7 +354,7 @@ fn install_from_gitee_zip(url: &str, dir: &Path, prebuilt: bool) -> Result<(), S
             .map(|d| d.as_millis())
             .unwrap_or(0)
     ));
-    mirrors::download_file(url, &tmp)?;
+    mirrors::download_file(app, url, &tmp)?;
     if dir.exists() {
         fs::remove_dir_all(dir).map_err(|e| format!("清理旧目录失败: {e}"))?;
     }
@@ -381,16 +417,23 @@ fn run_npm_in_dir(dir: &Path, args: &[&str]) -> CommandResult {
 
 fn write_bridge_start_scripts(dir: &Path) {
     let sh = format!(
-        "#!/bin/sh\n# VibeStart · 启动 DeepSeek Codex 桥\ncd \"{}\"\nexport PORT={DEEPSEEK_BRIDGE_DEFAULT_PORT}\nif [ -z \"$DEEPSEEK_API_KEY\" ]; then\n  echo \"请设置 DEEPSEEK_API_KEY 环境变量\"\n  exit 1\nfi\nnpm start\n",
+        "#!/bin/sh\n# VibeStart · 启动 DeepSeek Codex 桥\ncd \"{}\"\nexport PORT={DEEPSEEK_BRIDGE_DEFAULT_PORT}\nexport RATE_LIMIT_MAX=5000\nif [ -z \"$DEEPSEEK_API_KEY\" ]; then\n  echo \"请设置 DEEPSEEK_API_KEY 环境变量\"\n  exit 1\nfi\nnpm start\n",
         dir.display()
     );
     let _ = fs::write(dir.join("vibestart-start-bridge.sh"), sh);
 
     let bat = format!(
-        "@echo off\r\nREM VibeStart · 启动 DeepSeek Codex 桥\r\ncd /d \"{}\"\r\nset PORT={DEEPSEEK_BRIDGE_DEFAULT_PORT}\r\nif \"%DEEPSEEK_API_KEY%\"==\"\" (\r\n  echo 请设置 DEEPSEEK_API_KEY 环境变量\r\n  exit /b 1\r\n)\r\nnpm start\r\n",
+        "@echo off\r\nREM VibeStart · 启动 DeepSeek Codex 桥\r\ncd /d \"{}\"\r\nset PORT={DEEPSEEK_BRIDGE_DEFAULT_PORT}\r\nset RATE_LIMIT_MAX=5000\r\nif \"%DEEPSEEK_API_KEY%\"==\"\" (\r\n  echo 请设置 DEEPSEEK_API_KEY 环境变量\r\n  exit /b 1\r\n)\r\nnpm start\r\n",
         dir.display()
     );
     let _ = fs::write(dir.join("vibestart-start-bridge.bat"), bat);
+}
+
+fn is_port_listening(port: u16) -> bool {
+    let addr: SocketAddr = format!("127.0.0.1:{port}").parse().unwrap_or_else(|_| {
+        ([127, 0, 0, 1], port).into()
+    });
+    TcpStream::connect_timeout(&addr, Duration::from_millis(400)).is_ok()
 }
 
 pub fn start_deepseek_bridge() -> CommandResult {
@@ -427,11 +470,22 @@ pub fn start_deepseek_bridge() -> CommandResult {
         };
     }
 
+    if is_port_listening(DEEPSEEK_BRIDGE_DEFAULT_PORT) {
+        return CommandResult {
+            success: true,
+            log: format!(
+                "DeepSeek 桥已在运行（端口 {DEEPSEEK_BRIDGE_DEFAULT_PORT}）。\n\
+                 若健康检查异常，请点「重新检测」或重启应用后再试。"
+            ),
+        };
+    }
+
     let mut cmd = Command::new("npm");
     cmd.current_dir(&dir)
         .arg("start")
         .env("DEEPSEEK_API_KEY", api_key.trim())
         .env("PORT", DEEPSEEK_BRIDGE_DEFAULT_PORT.to_string())
+        .env("RATE_LIMIT_MAX", "5000")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());

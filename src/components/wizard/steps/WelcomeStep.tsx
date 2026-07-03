@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Rocket, Route } from "lucide-react";
+import { Rocket, Route, Sparkles, Upload } from "lucide-react";
 
 import {
   Card,
@@ -12,9 +12,10 @@ import { StepShell } from "@/components/wizard/StepShell";
 import { useTauriCommand } from "@/hooks/useTauriCommand";
 import type { OsInfo } from "@/lib/tauri-types";
 import { expressStepCount } from "@/lib/wizard-flow";
+import { applyDeployOnlyDefaults, isDeployOnlyIntent } from "@/lib/wizard-intent";
 import { getStepMeta } from "@/lib/wizard-index";
 import { selectableCardClasses } from "@/lib/selectable-card";
-import { useWizardStore, type WizardTrack } from "@/stores/wizardStore";
+import { useWizardStore, type UserIntent, type WizardTrack } from "@/stores/wizardStore";
 import { cn } from "@/lib/utils";
 
 const step = getStepMeta("welcome");
@@ -24,6 +25,34 @@ const PLATFORM_LABELS: Record<string, string> = {
   windows: "Windows",
   unknown: "未知",
 };
+
+const INTENTS: {
+  id: UserIntent;
+  title: string;
+  subtitle: string;
+  icon: React.ComponentType<{ className?: string }>;
+  bullets: string[];
+}[] = [
+  {
+    id: "fresh",
+    title: "从零开始",
+    subtitle: "还没项目，跟着向导装环境、用 AI 做 demo",
+    icon: Sparkles,
+    bullets: ["检测并安装开发工具", "选模板 + 提示词做第一个作品", "完成后可部署分享"],
+  },
+  {
+    id: "deploy-only",
+    title: "已有项目，直接部署",
+    subtitle: "环境 elsewhere 已就绪，只想上线",
+    icon: Upload,
+    bullets: [
+      "选已有项目文件夹（需含 index.html）",
+      "默认 Gitee Pages，国内访问更稳",
+      "也可改选 Vercel",
+      "约 3 步完成",
+    ],
+  },
+];
 
 const TRACKS: {
   id: WizardTrack;
@@ -57,6 +86,7 @@ const TRACKS: {
 ];
 
 export function WelcomeStep() {
+  const userIntent = useWizardStore((s) => s.selections.userIntent);
   const wizardTrack = useWizardStore((s) => s.selections.wizardTrack);
   const buildGoal = useWizardStore((s) => s.selections.buildGoal);
   const setSelection = useWizardStore((s) => s.setSelection);
@@ -66,11 +96,68 @@ export function WelcomeStep() {
     void run("get_os_info");
   }, [run]);
 
-  const expressSteps = expressStepCount({ buildGoal });
+  const deployOnly = isDeployOnlyIntent(userIntent);
+  const visibleSteps = expressStepCount({ buildGoal, userIntent });
+
+  const handleIntentChange = (intent: UserIntent) => {
+    if (intent === "deploy-only") {
+      applyDeployOnlyDefaults(setSelection);
+      return;
+    }
+    setSelection("userIntent", "fresh");
+  };
 
   return (
     <StepShell title={step.title} description={step.description} hidePrev>
       <div className="space-y-4">
+        <div>
+          <h3 className="mb-2 text-sm font-medium text-foreground">
+            你想怎么开始？
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {INTENTS.map((intent) => {
+              const Icon = intent.icon;
+              const selected = userIntent === intent.id;
+              return (
+                <button
+                  key={intent.id}
+                  type="button"
+                  onClick={() => handleIntentChange(intent.id)}
+                  className="text-left"
+                >
+                  <Card
+                    className={cn(
+                      selectableCardClasses(selected, "h-full"),
+                      selected && "ring-2 ring-primary/30",
+                    )}
+                  >
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Icon className="size-4 text-primary" />
+                        {intent.title}
+                      </CardTitle>
+                      <CardDescription>{intent.subtitle}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="list-inside list-disc space-y-1 text-xs text-muted-foreground">
+                        {intent.bullets.map((b) => (
+                          <li key={b}>{b}</li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                </button>
+              );
+            })}
+          </div>
+          {deployOnly && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              部署轨约 {visibleSteps} 步；跳过环境安装与 AI 配置，默认使用 Gitee Pages（国内推荐）。
+            </p>
+          )}
+        </div>
+
+        {!deployOnly && (
         <div>
           <h3 className="mb-2 text-sm font-medium text-foreground">
             选择向导模式
@@ -113,10 +200,11 @@ export function WelcomeStep() {
           </div>
           {wizardTrack === "express" && (
             <p className="mt-2 text-xs text-muted-foreground">
-              极速轨当前约 {expressSteps} 步；IDE / Git 可在完成后从工作台补开。
+              极速轨当前约 {visibleSteps} 步；IDE / Git 可在完成后从工作台补开。
             </p>
           )}
         </div>
+        )}
 
         <Card>
           <CardHeader>

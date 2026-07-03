@@ -1,6 +1,8 @@
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 use tauri::webview::NewWindowResponse;
+use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 
 use crate::config::{self, BrowserPreset};
 
@@ -10,6 +12,91 @@ const BROWSER_CHROME_SCRIPT: &str = include_str!("browser_chrome.js");
 
 /// 统一内置浏览器窗口（标签页 + 前进后退）
 pub const BROWSER_SHELL_LABEL: &str = "vibestart-browser";
+
+#[derive(Clone, Serialize, Deserialize, Debug, Default)]
+pub struct BrowserTab {
+    pub id: u32,
+    pub url: String,
+    pub title: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, Default)]
+pub struct BrowserTabState {
+    pub tabs: Vec<BrowserTab>,
+    pub active_id: u32,
+    pub next_id: u32,
+}
+
+impl BrowserTabState {
+    fn ensure_default_tab(&mut self, url: &str, title: &str) {
+        if self.tabs.is_empty() {
+            self.tabs.push(BrowserTab {
+                id: 1,
+                url: url.to_string(),
+                title: title.to_string(),
+            });
+            self.active_id = 1;
+            self.next_id = 2;
+        }
+    }
+}
+
+pub struct BrowserShellState(pub Mutex<BrowserTabState>);
+
+#[tauri::command]
+pub fn browser_tabs_get(state: State<'_, BrowserShellState>) -> BrowserTabState {
+    state.0.lock().unwrap().clone()
+}
+
+#[tauri::command]
+pub fn browser_tabs_save(
+    tabs: Vec<BrowserTab>,
+    active_id: u32,
+    next_id: u32,
+    state: State<'_, BrowserShellState>,
+) -> Result<(), String> {
+    *state.0.lock().unwrap() = BrowserTabState {
+        tabs,
+        active_id,
+        next_id,
+    };
+    Ok(())
+}
+
+fn tabs_state(app: &AppHandle) -> Option<State<'_, BrowserShellState>> {
+    app.try_state::<BrowserShellState>()
+}
+
+fn prepare_open_url(app: &AppHandle, url: &str, title: &str, new_tab: bool) {
+    let Some(state) = tabs_state(app) else {
+        return;
+    };
+    let mut tabs = state.0.lock().unwrap();
+    if new_tab {
+        let id = tabs.next_id.max(1);
+        tabs.next_id = id.saturating_add(1);
+        tabs.tabs.push(BrowserTab {
+            id,
+            url: url.to_string(),
+            title: if title.is_empty() {
+                "新标签页".to_string()
+            } else {
+                title.to_string()
+            },
+        });
+        tabs.active_id = id;
+        return;
+    }
+
+    tabs.ensure_default_tab(url, title);
+    let active_id = tabs.active_id;
+    if let Some(tab) = tabs.tabs.iter_mut().find(|t| t.id == active_id) {
+        tab.url = url.to_string();
+        if !title.is_empty() {
+            tab.title = title.to_string();
+        }
+    }
+}
 
 /// OAuth / 强依赖系统浏览器 — 必须外开
 const EXTERNAL_REQUIRED: &[&str] = &[
@@ -221,6 +308,7 @@ fn handle_new_window(app: &AppHandle, url_str: &str, preset: BrowserPreset) {
         return;
     }
     if should_prefer_in_app(url_str) || !url_str.to_lowercase().contains("github.com") {
+        prepare_open_url(app, url_str, "新标签页", true);
         if let Some(window) = app.get_webview_window(BROWSER_SHELL_LABEL) {
             if let Ok(js) = chrome_open_url_js(url_str, "新标签页", true) {
                 let _ = window.eval(&js);
@@ -261,6 +349,7 @@ pub fn open_in_app_with_options(
     let shell_label = BROWSER_SHELL_LABEL;
 
     if let Some(window) = app.get_webview_window(shell_label) {
+        prepare_open_url(app, url, title, false);
         let url_json = serde_json::to_string(url).map_err(|e| e.to_string())?;
         let title_json = serde_json::to_string(title).map_err(|e| e.to_string())?;
         let js = format!(
@@ -277,6 +366,7 @@ pub fn open_in_app_with_options(
     let init_script = build_init_script(preset, force_in_app, url);
     let app_handle = app.clone();
     let preset_for_links = preset;
+    prepare_open_url(app, url, title, false);
 
     WebviewWindowBuilder::new(app, shell_label, WebviewUrl::External(parsed))
         .title(title)

@@ -2,6 +2,7 @@ use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use tauri::AppHandle;
 
 use crate::config::vibestart_dir;
 use crate::os::{self, Platform};
@@ -33,6 +34,8 @@ pub struct Artifacts {
     pub codex_bridge_source: CodexBridgeSource,
     #[serde(default)]
     pub cc_switch: CcSwitchMirrors,
+    #[serde(default)]
+    pub codex_app: CodexAppMirrors,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -65,6 +68,20 @@ pub struct CcSwitchMirrors {
     pub windows_x86_64: String,
     #[serde(default)]
     pub macos_universal: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CodexAppMirrors {
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub tag: String,
+    #[serde(default)]
+    pub macos_aarch64: String,
+    #[serde(default)]
+    pub macos_x86_64: String,
+    #[serde(default)]
+    pub windows_x86_64: String,
 }
 
 pub fn load_mirrors() -> MirrorsManifest {
@@ -167,9 +184,41 @@ pub fn cc_switch_mirror_url() -> Option<String> {
     ))
 }
 
-pub fn download_file(url: &str, dest: &Path) -> Result<(), String> {
+pub fn codex_app_mirror_url() -> Option<String> {
+    let m = load_mirrors();
+    if m.gitee_release_base.is_empty() || m.gitee_release_base.contains("YOUR_GITEE_USER") {
+        return None;
+    }
+    let art = &m.artifacts.codex_app;
+    let file = match platform_artifact_key() {
+        "windows_x86_64" => &art.windows_x86_64,
+        "macos_aarch64" => &art.macos_aarch64,
+        "macos_x86_64" => &art.macos_x86_64,
+        _ => return None,
+    };
+    if file.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "{}/{}/{}",
+        m.gitee_release_base.trim_end_matches('/'),
+        art.tag,
+        file
+    ))
+}
+
+pub fn download_file(app: Option<&AppHandle>, url: &str, dest: &Path) -> Result<(), String> {
+    use std::io::{Read, Write};
+
+    crate::install_progress::emit(
+        app,
+        "download",
+        &format!("准备下载…"),
+        Some(0),
+    );
+
     let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(120))
+        .timeout(std::time::Duration::from_secs(300))
         .build()
         .map_err(|e| format!("下载客户端初始化失败: {e}"))?;
 
@@ -186,10 +235,42 @@ pub fn download_file(url: &str, dest: &Path) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
     }
 
+    let total = resp.content_length();
     let mut file =
         fs::File::create(dest).map_err(|e| format!("无法写入 {}: {e}", dest.display()))?;
-    resp.copy_to(&mut file)
-        .map_err(|e| format!("写入文件失败: {e}"))?;
+    let mut downloaded = 0u64;
+    let mut buffer = [0u8; 65536];
+
+    loop {
+        let read = resp
+            .read(&mut buffer)
+            .map_err(|e| format!("读取下载流失败: {e}"))?;
+        if read == 0 {
+            break;
+        }
+        file.write_all(&buffer[..read])
+            .map_err(|e| format!("写入文件失败: {e}"))?;
+        downloaded += read as u64;
+
+        if let Some(total) = total {
+            let pct = ((downloaded.saturating_mul(100)) / total.max(1)).min(99) as u8;
+            crate::install_progress::emit(
+                app,
+                "download",
+                &format!("下载中 {pct}%（{downloaded} / {total} 字节）"),
+                Some(pct),
+            );
+        } else {
+            crate::install_progress::emit(
+                app,
+                "download",
+                &format!("已下载 {downloaded} 字节…"),
+                None,
+            );
+        }
+    }
+
+    crate::install_progress::emit(app, "download", "下载完成", Some(100));
     Ok(())
 }
 

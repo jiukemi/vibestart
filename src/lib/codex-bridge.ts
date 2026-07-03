@@ -102,21 +102,29 @@ export const CODEX_BRIDGE_LLM_PROVIDERS = [
   "zhipu",
 ] as const;
 
+/** LLM 是否已在向导中明确选择（非默认值占位） */
+export function isLlmProviderChosen(
+  llmProvider: string | null | undefined,
+): boolean {
+  return llmProvider != null && llmProvider.length > 0;
+}
+
 export function needsCodexBridge(
   primaryIde: string | null | undefined,
   llmProvider: string | null | undefined,
 ): boolean {
+  if (!isLlmProviderChosen(llmProvider)) return false;
   if (primaryIde !== "codex") return false;
-  if (!llmProvider || llmProvider === "openai") return false;
+  if (llmProvider === "openai") return false;
   return (CODEX_BRIDGE_LLM_PROVIDERS as readonly string[]).includes(
-    llmProvider,
+    llmProvider as string,
   );
 }
 
 export function bridgeOptionForProvider(
   provider: string | null | undefined,
 ): CodexBridgeMode {
-  if (provider === "deepseek") return "deepseek-bridge"; // 用户仍可改选 cc-switch
+  if (provider === "deepseek") return "deepseek-bridge";
   if (
     provider &&
     (CODEX_BRIDGE_LLM_PROVIDERS as readonly string[]).includes(provider)
@@ -124,4 +132,27 @@ export function bridgeOptionForProvider(
     return "cc-switch";
   }
   return "none";
+}
+
+/** 当前 LLM 下用户可选择的桥接方式；未选 LLM 时（IDE 步骤）两种均可选 */
+export function listBridgeOptionsForProvider(
+  provider: string | null | undefined,
+): CodexBridgeOption[] {
+  if (!provider) {
+    return [...CODEX_BRIDGE_OPTIONS];
+  }
+  if (provider === "openai") {
+    return [];
+  }
+  if (provider === "deepseek") {
+    return [...CODEX_BRIDGE_OPTIONS];
+  }
+  if ((CODEX_BRIDGE_LLM_PROVIDERS as readonly string[]).includes(provider)) {
+    return CODEX_BRIDGE_OPTIONS.filter((o) => o.id === "cc-switch");
+  }
+  return [];
+}
+
+export function isCodexIde(primaryIde: string | null | undefined): boolean {
+  return primaryIde === "codex";
 }

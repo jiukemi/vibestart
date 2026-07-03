@@ -32,7 +32,7 @@ import { StepShell } from "@/components/wizard/StepShell";
 import { useOsInfo } from "@/hooks/useOsInfo";
 import { quitAppHint } from "@/lib/platform-ui";
 import { useTauriCommand } from "@/hooks/useTauriCommand";
-import { needsCodexBridge } from "@/lib/codex-bridge";
+import { isCodexIde, needsCodexBridge } from "@/lib/codex-bridge";
 import { getIdeOption } from "@/lib/ide";
 import type {
   IdeSyncBatchResult,
@@ -87,7 +87,8 @@ export function LlmApiKeyStep() {
   );
   const projectDir = useWizardStore((s) => s.selections.projectDir);
   const setSelection = useWizardStore((s) => s.setSelection);
-  const selected = llmProvider ?? "deepseek";
+  const llmChosen = llmProvider != null;
+  const activeProvider = llmProvider ?? "deepseek";
 
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
@@ -110,7 +111,7 @@ export function LlmApiKeyStep() {
   const loadStoredKey = useCallback(async () => {
     try {
       const config = await loadConfig("get_llm_config");
-      if (config && config.provider === selected) {
+      if (config && config.provider === activeProvider && llmChosen) {
         setApiKey(config.api_key);
         setValidated(true);
         setStatusMessage("已从本地配置加载已验证的 Key");
@@ -128,18 +129,18 @@ export function LlmApiKeyStep() {
       setStatusMessage(null);
       setSyncBatch(null);
     }
-  }, [loadConfig, selected]);
+  }, [activeProvider, llmChosen, loadConfig]);
 
   useEffect(() => {
     void loadStoredKey();
   }, [loadStoredKey]);
 
-  const testOnly = async (): Promise<boolean> => {
+  const testOnly = async (provider: string): Promise<boolean> => {
     setStatusMessage(null);
     setSyncBatch(null);
     setSynced(false);
     const result = await testCommand.run("test_llm_api", {
-      provider: selected,
+      provider,
       apiKey: apiKey.trim(),
     });
     if (result) {
@@ -151,8 +152,12 @@ export function LlmApiKeyStep() {
   };
 
   const handleStepNext = async (): Promise<boolean> => {
+    const provider = llmProvider ?? "deepseek";
+    if (!llmProvider) {
+      setSelection("llmProvider", provider);
+    }
     if (validated) return true;
-    return testOnly();
+    return testOnly(provider);
   };
 
   const runSync = async () => {
@@ -160,7 +165,7 @@ export function LlmApiKeyStep() {
     setSyncBatch(null);
     const result = await syncCommand.run("sync_llm_to_ides", {
       ides: llmSyncTargets,
-      provider: selected,
+      provider: activeProvider,
       apiKey: apiKey.trim(),
     });
     if (result) {
@@ -175,23 +180,26 @@ export function LlmApiKeyStep() {
     .join("、");
 
   const selectedProviderName =
-    LLM_PROVIDERS.find((p) => p.id === selected)?.name ?? selected;
+    LLM_PROVIDERS.find((p) => p.id === activeProvider)?.name ??
+    activeProvider;
 
   const canSync =
+    llmChosen &&
     validated &&
     llmSyncTargets.length > 0 &&
     apiKey.trim().length > 0 &&
     !syncCommand.loading;
 
-  const showCodexBridge = needsCodexBridge(primaryIde, selected);
+  const showCodexBridgeContinue =
+    isCodexIde(primaryIde) && llmChosen && needsCodexBridge(primaryIde, llmProvider);
 
   return (
     <StepShell
       title={step.title}
-      description="先按教程获取 Key，验证后再选择编辑器并确认同步。"
+      description="先选择 LLM 供应商，按教程获取 Key 并验证，再同步到编辑器。"
       onNext={handleStepNext}
       nextDisabled={
-        testCommand.loading || (!validated && !apiKey.trim())
+        testCommand.loading || !llmChosen || (!validated && !apiKey.trim())
       }
       nextLabel={
         testCommand.loading
@@ -201,9 +209,16 @@ export function LlmApiKeyStep() {
             : "验证并继续"
       }
     >
+      {isCodexIde(primaryIde) && !llmChosen && (
+        <p className="rounded-lg border border-dashed border-primary/30 bg-primary/5 px-3 py-2 text-sm text-muted-foreground dark:bg-primary/10">
+          你已在 IDE 步骤开始 Codex 配置。请在此选择 LLM：国产模型将继续桥接清单，OpenAI
+          官方 API 无需本地桥。
+        </p>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {LLM_PROVIDERS.map((provider) => {
-          const isSelected = selected === provider.id;
+          const isSelected = llmProvider === provider.id;
           return (
             <button
               key={provider.id}
@@ -238,207 +253,224 @@ export function LlmApiKeyStep() {
         })}
       </div>
 
-      <LlmApiKeyGuidePanel providerId={selected} />
-
-      <div className="space-y-2">
-        <label
-          htmlFor="llm-api-key"
-          className="text-sm font-medium text-foreground"
-        >
-          粘贴 API Key
-        </label>
-        <div className="relative">
-          <input
-            id="llm-api-key"
-            type={showKey ? "text" : "password"}
-            value={apiKey}
-            onChange={(e) => {
-              setApiKey(e.target.value);
-              setValidated(false);
-              setSynced(false);
-              setStatusMessage(null);
-              setSyncBatch(null);
-            }}
-            placeholder="sk-..."
-            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 pr-10 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            className="absolute top-1/2 right-2 -translate-y-1/2"
-            aria-label={showKey ? "隐藏密钥" : "显示密钥"}
-            onClick={() => setShowKey((v) => !v)}
-          >
-            {showKey ? (
-              <EyeOff className="size-3.5" />
-            ) : (
-              <Eye className="size-3.5" />
-            )}
-          </Button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!apiKey.trim() || testCommand.loading}
-            onClick={() => void testOnly()}
-          >
-            {testCommand.loading && (
-              <Loader2 className="size-3.5 animate-spin" />
-            )}
-            仅测试连接
-          </Button>
-          {validated && !testCommand.error && (
-            <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="size-3.5" />
-              已验证
-            </span>
-          )}
-          {synced && (
-            <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="size-3.5" />
-              已同步到编辑器
-            </span>
-          )}
-        </div>
-
-        {statusMessage && !testCommand.error && (
-          <p className="text-xs text-muted-foreground">{statusMessage}</p>
-        )}
-        {testCommand.error && (
-          <p className="text-xs text-destructive">{testCommand.error}</p>
-        )}
-      </div>
-
-      <IdeSyncTargetPicker
-        selected={llmSyncTargets}
-        onChange={setSyncTargets}
-        primaryIde={primaryIde}
-      />
-
-      {showCodexBridge && (
-        <CodexBridgePanel llmProvider={selected} />
+      {!llmChosen && (
+        <p className="text-sm text-muted-foreground">
+          选择 LLM 供应商后，将显示 Key 获取教程与输入框。
+        </p>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          disabled={!canSync}
-          onClick={() => setConfirmOpen(true)}
-        >
-          {syncCommand.loading ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Upload className="size-4" />
-          )}
-          {syncCommand.loading ? "同步中…" : "同步到选中的编辑器"}
-        </Button>
-        {!validated && llmSyncTargets.length > 0 && (
-          <p className="self-center text-xs text-muted-foreground">
-            请先测试连接，再同步
-          </p>
-        )}
-      </div>
-
-      {syncBatch && (
+      {llmChosen && (
         <>
-          <Card
-            size="sm"
-            className={cn(
-              syncBatch.success
-                ? "border-emerald-500/30 bg-emerald-500/5"
-                : "border-amber-500/30 bg-amber-500/5",
+          <LlmApiKeyGuidePanel providerId={activeProvider} />
+
+          <div className="space-y-2">
+            <label
+              htmlFor="llm-api-key"
+              className="text-sm font-medium text-foreground"
+            >
+              粘贴 API Key
+            </label>
+            <div className="relative">
+              <input
+                id="llm-api-key"
+                type={showKey ? "text" : "password"}
+                value={apiKey}
+                onChange={(e) => {
+                  setApiKey(e.target.value);
+                  setValidated(false);
+                  setSynced(false);
+                  setStatusMessage(null);
+                  setSyncBatch(null);
+                }}
+                placeholder="sk-..."
+                className="flex h-9 w-full rounded-lg border border-input bg-background px-3 pr-10 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="absolute top-1/2 right-2 -translate-y-1/2"
+                aria-label={showKey ? "隐藏密钥" : "显示密钥"}
+                onClick={() => setShowKey((v) => !v)}
+              >
+                {showKey ? (
+                  <EyeOff className="size-3.5" />
+                ) : (
+                  <Eye className="size-3.5" />
+                )}
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!apiKey.trim() || testCommand.loading}
+                onClick={() => void testOnly(activeProvider)}
+              >
+                {testCommand.loading && (
+                  <Loader2 className="size-3.5 animate-spin" />
+                )}
+                仅测试连接
+              </Button>
+              {validated && !testCommand.error && (
+                <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="size-3.5" />
+                  已验证
+                </span>
+              )}
+              {synced && (
+                <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="size-3.5" />
+                  已同步到编辑器
+                </span>
+              )}
+            </div>
+
+            {statusMessage && !testCommand.error && (
+              <p className="text-xs text-muted-foreground">{statusMessage}</p>
             )}
-          >
-            <CardHeader>
-              <CardTitle className="text-base">同步结果</CardTitle>
-              <CardDescription className="whitespace-pre-wrap">
-                {syncBatch.message}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {syncBatch.results.map((item) => (
-                <div
-                  key={item.ide}
-                  className="rounded-lg border border-border bg-background/60 p-3 dark:bg-background/40"
+            {testCommand.error && (
+              <p className="text-xs text-destructive">{testCommand.error}</p>
+            )}
+          </div>
+
+          {showCodexBridgeContinue && llmProvider && (
+            <CodexBridgePanel
+              llmProvider={llmProvider}
+              phase="llm-api-key"
+              apiKeyReady={validated}
+            />
+          )}
+
+          <IdeSyncTargetPicker
+            selected={llmSyncTargets}
+            onChange={setSyncTargets}
+            primaryIde={primaryIde}
+            action={
+              <>
+                <Button
+                  type="button"
+                  disabled={!canSync}
+                  onClick={() => setConfirmOpen(true)}
                 >
-                  <p className="text-sm font-medium text-foreground">
-                    {item.ide_name}{" "}
-                    {item.success ? "✅" : "⚠️"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{item.message}</p>
-                  {item.details.length > 0 && (
-                    <ul className="mt-1 list-inside list-disc text-xs text-muted-foreground">
-                      {item.details.map((d, i) => (
-                        <li key={i}>{d}</li>
-                      ))}
-                    </ul>
+                  {syncCommand.loading ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Upload className="size-4" />
                   )}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+                  {syncCommand.loading ? "同步中…" : "同步到选中的编辑器"}
+                </Button>
+                {!validated && llmSyncTargets.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    请先测试连接，再同步
+                  </p>
+                )}
+              </>
+            }
+          />
+
+          {syncBatch && (
+            <Card
+              size="sm"
+              className={cn(
+                syncBatch.success
+                  ? "border-emerald-500/30 bg-emerald-500/5"
+                  : "border-amber-500/30 bg-amber-500/5",
+              )}
+            >
+              <CardHeader>
+                <CardTitle className="text-base">同步结果</CardTitle>
+                <CardDescription className="whitespace-pre-wrap">
+                  {syncBatch.message}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {syncBatch.results.map((item) => (
+                  <div
+                    key={item.ide}
+                    className="rounded-lg border border-border bg-background/60 p-3 dark:bg-background/40"
+                  >
+                    <p className="text-sm font-medium text-foreground">
+                      {item.ide_name} {item.success ? "✅" : "⚠️"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {item.message}
+                    </p>
+                    {item.details.length > 0 && (
+                      <ul className="mt-1 list-inside list-disc text-xs text-muted-foreground">
+                        {item.details.map((d, i) => (
+                          <li key={i}>{d}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {(syncBatch || (validated && llmSyncTargets.length > 0)) && (
+            <IdeSyncVerifyPanel
+              ides={llmSyncTargets}
+              provider={activeProvider}
+              apiKey={apiKey}
+              projectDir={projectDir}
+              autoVerify={Boolean(syncBatch && verifyAfterSync)}
+            />
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            Key 保存在{" "}
+            <code className="text-foreground">~/.vibestart/config.json</code>
+            （权限 600）。同步后会自动验证各编辑器配置；Cursor 等若需额外开关，按验证面板指引操作。
+            同步可随时跳过，稍后在编辑器里手动配置也行。
+          </p>
+
+          <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>确认同步 API Key？</DialogTitle>
+                <DialogDescription>
+                  将把 {selectedProviderName} 的 Key 写入：
+                  {selectedIdeNames || "（未选择）"}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 px-0 text-sm text-muted-foreground">
+                <ul className="list-inside list-disc space-y-1 text-xs">
+                  <li>Key 仅保存在你的电脑上，不会上传到网络</li>
+                  <li>
+                    Cursor 类编辑器需完全退出后重启（{quitAppHint(platform)}）
+                  </li>
+                  <li>可随时取消，改在编辑器里手动粘贴 Key</li>
+                </ul>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setConfirmOpen(false)}
+                >
+                  取消
+                </Button>
+                <Button
+                  type="button"
+                  disabled={syncCommand.loading}
+                  onClick={() => void runSync()}
+                >
+                  {syncCommand.loading ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="size-4" />
+                  )}
+                  确认同步
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
-
-      {(syncBatch || (validated && llmSyncTargets.length > 0)) && (
-        <IdeSyncVerifyPanel
-          ides={llmSyncTargets}
-          provider={selected}
-          apiKey={apiKey}
-          projectDir={projectDir}
-          autoVerify={Boolean(syncBatch && verifyAfterSync)}
-        />
-      )}
-
-      <p className="text-xs text-muted-foreground">
-        Key 保存在{" "}
-        <code className="text-foreground">~/.vibestart/config.json</code>（权限
-        600）。同步后会自动验证各编辑器配置；Cursor 等若需额外开关，按验证面板指引操作。
-        同步可随时跳过，稍后在编辑器里手动配置也行。
-      </p>
-
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>确认同步 API Key？</DialogTitle>
-            <DialogDescription>
-              将把 {selectedProviderName} 的 Key 写入：{selectedIdeNames || "（未选择）"}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 px-0 text-sm text-muted-foreground">
-            <ul className="list-inside list-disc space-y-1 text-xs">
-              <li>Key 仅保存在你的电脑上，不会上传到网络</li>
-              <li>Cursor 类编辑器需完全退出后重启（{quitAppHint(platform)}）</li>
-              <li>可随时取消，改在编辑器里手动粘贴 Key</li>
-            </ul>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setConfirmOpen(false)}
-            >
-              取消
-            </Button>
-            <Button
-              type="button"
-              disabled={syncCommand.loading}
-              onClick={() => void runSync()}
-            >
-              {syncCommand.loading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <RefreshCw className="size-4" />
-              )}
-              确认同步
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </StepShell>
   );
 }

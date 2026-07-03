@@ -50,15 +50,16 @@ export function WorkbenchIdeLauncher({ projectDir }: WorkbenchIdeLauncherProps) 
   const { run: runScan, loading: scanLoading, data: scanData } =
     useTauriCommand<ToolStatus[]>();
   const { launchIde, launching, launchError, dialog } = useLaunchIde();
-  const healthCmd = useTauriCommand<CodexBridgeHealth>();
+  const { run: runHealthCheck, loading: healthLoading, data: health } =
+    useTauriCommand<CodexBridgeHealth>();
 
   const showCodexBridge = needsCodexBridge(selected, llmProvider);
 
   useEffect(() => {
     if (showCodexBridge) {
-      void healthCmd.run("check_codex_bridge_health", {});
+      void runHealthCheck("check_codex_bridge_health", {});
     }
-  }, [healthCmd, showCodexBridge, selected]);
+  }, [runHealthCheck, showCodexBridge, selected]);
 
   useEffect(() => {
     void runScan("scan_environment");
@@ -172,7 +173,7 @@ export function WorkbenchIdeLauncher({ projectDir }: WorkbenchIdeLauncherProps) 
           {showCodexBridge && (
             <div className="space-y-2">
               <CodexBridgePanel llmProvider={llmProvider} compact />
-              {!healthCmd.data?.ready && !healthCmd.loading && (
+              {!health?.ready && !healthLoading && (
                 <p className="text-xs text-amber-600 dark:text-amber-400">
                   桥接未就绪时 Codex 可能无法调用国产模型，但仍可尝试启动。
                 </p>

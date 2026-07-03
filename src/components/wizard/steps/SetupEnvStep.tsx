@@ -4,7 +4,7 @@ import { Download, RefreshCw, Zap } from "lucide-react";
 import { GoalPathPanel } from "@/components/goal/GoalPathPanel";
 import { GoalSwitcherDialog } from "@/components/goal/GoalSwitcherDialog";
 import { Badge } from "@/components/ui/badge";
-import { CommandOutput } from "@/components/shared/CommandOutput";
+import { InstallProgressPanel } from "@/components/shared/InstallProgressPanel";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,6 +20,7 @@ import { StepShell } from "@/components/wizard/StepShell";
 import { getGoalLabel, getGoalTools } from "@/lib/build-goals";
 import { needsCodexBridge } from "@/lib/codex-bridge";
 import { useTauriCommand } from "@/hooks/useTauriCommand";
+import { useInstallProgress } from "@/hooks/useInstallProgress";
 import { getStepMeta } from "@/lib/wizard-index";
 import type { CommandResult, OsInfo, ToolStatus } from "@/lib/tauri-types";
 import { isExpressTrack } from "@/lib/wizard-flow";
@@ -56,6 +57,9 @@ export function SetupEnvStep() {
   const [installLog, setInstallLog] = useState<string | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
   const [goalSwitchOpen, setGoalSwitchOpen] = useState(false);
+  const installBusy = installCommand.loading || batchRunning;
+  const { progress, streamLog } = useInstallProgress(installBusy);
+  const mergedInstallLog = [streamLog, installLog].filter(Boolean).join("\n\n");
 
   const goalTools = useMemo(
     () => getGoalTools(buildGoal, appStack),
@@ -307,14 +311,15 @@ export function SetupEnvStep() {
             })}
           </div>
 
-          {(installCommand.loading || installLog) && (
-            <CommandOutput
-              loading={installCommand.loading || batchRunning}
-              log={installLog ?? installCommand.error}
+          {(installBusy || mergedInstallLog || installCommand.error) && (
+            <InstallProgressPanel
+              loading={installBusy}
+              progress={progress}
+              log={mergedInstallLog || installCommand.error}
             />
           )}
 
-          {installCommand.error && !installLog && (
+          {installCommand.error && !installLog && !streamLog && (
             <p className="text-sm text-destructive">{installCommand.error}</p>
           )}
         </CardContent>

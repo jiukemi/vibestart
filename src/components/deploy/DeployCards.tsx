@@ -34,6 +34,8 @@ interface DeployCardsProps {
   vercelLoginLoading?: boolean;
   /** 极速轨：仅展示 Vercel */
   expressMode?: boolean;
+  /** 已有项目部署轨：同时展示 Gitee + Vercel，默认国内 Gitee */
+  deployOnlyMode?: boolean;
   children?: React.ReactNode;
 }
 
@@ -50,12 +52,13 @@ export function DeployCards({
   onVercelLogin,
   vercelLoginLoading = false,
   expressMode = false,
+  deployOnlyMode = false,
   children,
 }: DeployCardsProps) {
   const { open: openBrowser, loading: browserLoading } = useOpenInAppBrowser();
   const [browserHint, setBrowserHint] = useState<string | null>(null);
-  const showGithub = !expressMode && gitProvider === "github";
-  const showGitee = !expressMode && gitProvider === "gitee";
+  const showGithub = !expressMode && !deployOnlyMode && gitProvider === "github";
+  const showGitee = deployOnlyMode || (!expressMode && gitProvider === "gitee");
   const pagesUsername = showGitee ? giteeUsername : githubUsername;
 
   return (
@@ -64,6 +67,7 @@ export function DeployCards({
         className={cn(
           "grid gap-4",
           showGithub || showGitee ? "lg:grid-cols-2" : "max-w-xl",
+          deployOnlyMode && "lg:grid-cols-2",
         )}
       >
         <button
@@ -81,7 +85,8 @@ export function DeployCards({
               <CardTitle className="flex items-center gap-2">
                 <Rocket className="size-5 text-primary" />
                 Vercel
-                <Badge>推荐 · 约 30 秒</Badge>
+                {!deployOnlyMode && <Badge>推荐 · 约 30 秒</Badge>}
+                {deployOnlyMode && <Badge variant="secondary">海外 / 备选</Badge>}
               </CardTitle>
               <CardDescription>
                 零配置静态部署，适合快速分享你的第一个作品。
@@ -216,13 +221,63 @@ export function DeployCards({
                 <CardTitle className="flex items-center gap-2">
                   <Globe className="size-5" />
                   Gitee Pages
-                  <Badge variant="secondary">国内推荐</Badge>
+                  <Badge variant={deployOnlyMode ? "default" : "secondary"}>
+                    {deployOnlyMode ? "国内推荐 · 默认" : "国内推荐"}
+                  </Badge>
                 </CardTitle>
                 <CardDescription>
-                  推送到 Gitee 后在仓库服务中开启 Pages。
+                  推送到 Gitee 后在仓库服务中开启 Pages。国内分享链接更稳定。
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
+                {deployOnlyMode && (
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={browserLoading}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void openBrowser(
+                          "open_external_browser",
+                          {
+                            url: "https://gitee.com/signup",
+                            title: "注册 Gitee",
+                          },
+                          "正在打开浏览器…",
+                          "external",
+                        ).then(() =>
+                          setBrowserHint(
+                            "已在浏览器打开 Gitee 注册页。注册后请新建仓库并填写下方用户名与仓库名。",
+                          ),
+                        );
+                      }}
+                    >
+                      <ExternalLink className="size-4" />
+                      注册 Gitee
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={browserLoading}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void openBrowser(
+                          "open_external_browser",
+                          {
+                            url: "https://gitee.com/projects/new",
+                            title: "新建 Gitee 仓库",
+                          },
+                          "正在打开浏览器…",
+                          "external",
+                        );
+                      }}
+                    >
+                      新建仓库
+                    </Button>
+                  </div>
+                )}
                 <DeployRepoFields
                   username={giteeUsername}
                   repo={githubRepoName}
@@ -239,10 +294,17 @@ export function DeployCards({
         )}
       </div>
 
-      {gitProvider === "skip" && (
+      {gitProvider === "skip" && !deployOnlyMode && (
         <p className="text-sm text-muted-foreground">
           你选择了跳过 Git，推荐使用 Vercel 部署。若需 Pages，请回到「Git 托管」步骤配置
           Gitee 或 GitHub。
+        </p>
+      )}
+
+      {deployOnlyMode && (
+        <p className="text-sm text-muted-foreground">
+          国内用户推荐 Gitee Pages；需能访问外网时可选 Vercel。部署前请确保已在 Gitee
+          创建同名空仓库并配置 SSH。
         </p>
       )}
 

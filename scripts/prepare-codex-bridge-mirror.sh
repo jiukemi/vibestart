@@ -4,13 +4,16 @@
 set -euo pipefail
 
 OUT_DIR="${1:-./mirror-out}"
+mkdir -p "$OUT_DIR"
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"
+
 WORK="/tmp/vibestart-codex-bridge-build"
 REPO="${CODEX_BRIDGE_REPO:-https://github.com/xiaoshaoning/codex-bridge.git}"
 VERSION="${CODEX_BRIDGE_VERSION:-1.0.0}"
 NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
 
 rm -rf "$WORK"
-mkdir -p "$WORK" "$OUT_DIR"
+mkdir -p "$WORK"
 
 echo "==> 克隆 codex-bridge"
 git clone --depth 1 "$REPO" "$WORK/src"

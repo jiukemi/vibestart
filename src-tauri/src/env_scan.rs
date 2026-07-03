@@ -23,6 +23,8 @@ pub fn scan_all() -> Vec<ToolStatus> {
         scan_windsurf(),
         scan_claude_code(),
         scan_codex(),
+        scan_codex_bridge(),
+        scan_cc_switch(),
         scan_tongyi_lingma(),
         scan_command("vercel", &["--version"], |s| s.trim().to_string()),
         scan_command("flutter", &["--version"], |s| {
@@ -238,7 +240,91 @@ fn scan_claude_code() -> ToolStatus {
 }
 
 fn scan_codex() -> ToolStatus {
-    scan_named_cli("codex", "codex", &["--version"])
+    if let Some(path) = crate::codex_app::codex_app_path() {
+        let version = crate::codex_app::codex_app_version(&path);
+        return ToolStatus {
+            name: "codex".to_string(),
+            installed: true,
+            version,
+            path: Some(path),
+            meets_minimum: true,
+        };
+    }
+
+    ToolStatus {
+        name: "codex".to_string(),
+        installed: false,
+        version: None,
+        path: None,
+        meets_minimum: false,
+    }
+}
+
+fn scan_codex_bridge() -> ToolStatus {
+    let dir = match crate::config::vibestart_dir() {
+        Ok(d) => d.join("tools").join("codex-bridge"),
+        Err(_) => {
+            return ToolStatus {
+                name: "codex-bridge".to_string(),
+                installed: false,
+                version: None,
+                path: None,
+                meets_minimum: false,
+            };
+        }
+    };
+    let server = dir.join("dist").join("server.js");
+    let installed = server.is_file();
+    ToolStatus {
+        name: "codex-bridge".to_string(),
+        installed,
+        version: if installed {
+            Some("installed".into())
+        } else {
+            None
+        },
+        path: if installed {
+            Some(dir.to_string_lossy().into())
+        } else {
+            None
+        },
+        meets_minimum: installed,
+    }
+}
+
+fn scan_cc_switch() -> ToolStatus {
+    let (installed, path) = if cfg!(target_os = "macos") {
+        let app = Path::new("/Applications/CC Switch.app");
+        (app.exists(), app.exists().then(|| app.to_string_lossy().into()))
+    } else if cfg!(target_os = "windows") {
+        let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            candidates.push(
+                std::path::PathBuf::from(local)
+                    .join("Programs")
+                    .join("CC Switch")
+                    .join("CC Switch.exe"),
+            );
+        }
+        candidates.push(std::path::PathBuf::from(
+            r"C:\Program Files\CC Switch\CC Switch.exe",
+        ));
+        let found = candidates.into_iter().find(|p| p.is_file());
+        (
+            found.is_some(),
+            found.map(|p| p.to_string_lossy().into()),
+        )
+    } else {
+        (false, None)
+    };
+
+    ToolStatus {
+        name: "cc-switch".to_string(),
+        installed,
+        version: None,
+        path,
+        meets_minimum: installed,
+    }
 }
 
 fn scan_named_cli(name: &str, cmd: &str, args: &[&str]) -> ToolStatus {

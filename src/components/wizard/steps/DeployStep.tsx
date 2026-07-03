@@ -18,6 +18,7 @@ import { StepShell } from "@/components/wizard/StepShell";
 import { useTauriCommand } from "@/hooks/useTauriCommand";
 import type { DeployResult } from "@/lib/tauri-types";
 import { getStepMeta } from "@/lib/wizard-index";
+import { isDeployOnlyIntent } from "@/lib/wizard-intent";
 import { useWizardStore } from "@/stores/wizardStore";
 
 const step = getStepMeta("deploy");
@@ -30,9 +31,11 @@ export function DeployStep() {
   const giteeUsername = useWizardStore((s) => s.selections.giteeUsername);
   const githubRepoName = useWizardStore((s) => s.selections.githubRepoName);
   const wizardTrack = useWizardStore((s) => s.selections.wizardTrack);
+  const userIntent = useWizardStore((s) => s.selections.userIntent);
   const setSelection = useWizardStore((s) => s.setSelection);
 
-  const expressMode = wizardTrack === "express";
+  const deployOnly = isDeployOnlyIntent(userIntent);
+  const expressMode = wizardTrack === "express" && !deployOnly;
 
   const [copied, setCopied] = useState(false);
   const [deployLog, setDeployLog] = useState<string | null>(null);
@@ -48,6 +51,9 @@ export function DeployStep() {
   const selected = (deployTarget ?? "vercel") as DeployTarget;
 
   useEffect(() => {
+    if (deployOnly) {
+      return;
+    }
     if (gitProvider === "gitee" && selected !== "gitee-pages" && selected !== "vercel") {
       setSelection("deployTarget", "gitee-pages");
     } else if (gitProvider === "github" && selected === "gitee-pages") {
@@ -55,7 +61,7 @@ export function DeployStep() {
     } else if (gitProvider === "skip" && selected !== "vercel") {
       setSelection("deployTarget", "vercel");
     }
-  }, [gitProvider, selected, setSelection]);
+  }, [deployOnly, gitProvider, selected, setSelection]);
 
   const handleDeploy = useCallback(async () => {
     if (!projectDir) return;
@@ -148,8 +154,12 @@ export function DeployStep() {
 
   return (
     <StepShell
-      title={step.title}
-      description={step.description}
+      title={deployOnly ? "部署已有项目" : step.title}
+      description={
+        deployOnly
+          ? "默认 Gitee Pages（国内推荐），也可切换 Vercel"
+          : step.description
+      }
       nextDisabled={!deploySuccess && !deploySkipped}
       nextLabel={deploySkipped ? "下一步：查看总结" : "完成，查看总结"}
       secondaryNext={
@@ -165,6 +175,14 @@ export function DeployStep() {
       }
     >
       <div className="space-y-4">
+        {deployOnly && (
+          <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground dark:bg-primary/10">
+            已有项目部署轨：推荐{" "}
+            <strong className="text-foreground">Gitee Pages</strong>{" "}
+            便于国内访问。推送后请在 Gitee 仓库 → 服务 → Gitee Pages 手动启动。
+          </p>
+        )}
+
         {expressMode && (
           <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground dark:bg-primary/10">
             极速轨：使用 <strong className="text-foreground">Vercel</strong>{" "}
@@ -188,6 +206,7 @@ export function DeployStep() {
           selected={selected}
           gitProvider={gitProvider}
           expressMode={expressMode}
+          deployOnlyMode={deployOnly}
           onSelect={(target) => setSelection("deployTarget", target)}
           githubUsername={githubUsername ?? ""}
           giteeUsername={giteeUsername ?? ""}

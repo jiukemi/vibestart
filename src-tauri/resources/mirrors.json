@@ -1,7 +1,7 @@
 {
   "version": 1,
   "npm_registry": "https://registry.npmmirror.com",
-  "gitee_release_base": "https://gitee.com/YOUR_GITEE_USER/vibestart-mirrors/releases/download",
+  "gitee_release_base": "https://gitee.com/webhwh/vibestart-mirrors/releases/download",
   "artifacts": {
     "codex_bridge_prebuilt": {
       "version": "1.0.0",
@@ -18,6 +18,13 @@
     "cc_switch": {
       "windows_x86_64": "",
       "macos_universal": ""
+    },
+    "codex_app": {
+      "version": "1.0.0",
+      "tag": "codex-app-latest",
+      "macos_aarch64": "Codex-darwin-arm64.dmg",
+      "macos_x86_64": "Codex-darwin-x64.dmg",
+      "windows_x86_64": ""
     }
   },
   "_comment": "将 YOUR_GITEE_USER 换成你的 Gitee 用户名；Release 资产文件名与上表一致。详见 docs/MIRRORS.md"

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { Monitor } from "lucide-react";
 
 import {
@@ -16,12 +16,15 @@ interface IdeSyncTargetPickerProps {
   selected: string[];
   onChange: (ids: string[]) => void;
   primaryIde: string | null;
+  /** 与编辑器选择同卡展示的操作区（如同步按钮） */
+  action?: ReactNode;
 }
 
 export function IdeSyncTargetPicker({
   selected,
   onChange,
   primaryIde,
+  action,
 }: IdeSyncTargetPickerProps) {
   const safeSelected = selected ?? [];
   const { run: runScan, loading, data: scanData } = useTauriCommand<ToolStatus[]>();
@@ -105,6 +108,11 @@ export function IdeSyncTargetPicker({
                 </button>
               );
             })}
+          </div>
+        )}
+        {action && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
+            {action}
           </div>
         )}
       </div>
