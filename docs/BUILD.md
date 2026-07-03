@@ -83,6 +83,36 @@ npm run tauri build
 
 GitHub 仓库需开启：**Settings → Actions → General → Workflow permissions → Read and write permissions**。
 
+### 一键发版（推荐）
+
+**一次性**：添加 GitHub 远端
+
+```bash
+# GitHub 网页新建 Public 空仓库 vibestart 后：
+./scripts/setup-github.sh https://github.com/你的用户名/vibestart.git
+```
+
+**每次发新版**：
+
+```bash
+./scripts/release.sh --current  # 首次 v0.1.0，不 bump
+./scripts/release.sh          # 之后每次 patch +1
+./scripts/release.sh 0.2.0      # 指定版本
+./scripts/release.sh --dry-run  # 预览不执行
+```
+
+或 `npm run release` / `npm run release:minor`。
+
+脚本会同步更新 `package.json`、`tauri.conf.json`、`Cargo.toml` 三处版本号，推送 `v*` tag 到 GitHub 后 **Actions 自动打 macOS（arm + Intel）+ Windows 包**，无需 Intel Mac 或 Windows 打包机。
+
+发版后：GitHub Releases 检查 Draft → Windows 验收 → 安装包上传 [Gitee Release](https://gitee.com/webhwh/vibestart/releases)。
+
+### 手动发版
+
+1. 改三处版本号后 commit
+2. `git tag v0.1.0 && git push origin v0.1.0 && git push github v0.1.0`
+3. 等 Actions 完成，发布 Draft Release
+
 ---
 
 ## 拷贝到另一台电脑试用
