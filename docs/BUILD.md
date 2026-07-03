@@ -105,7 +105,19 @@ GitHub 仓库需开启：**Settings → Actions → General → Workflow permiss
 
 脚本会同步更新 `package.json`、`tauri.conf.json`、`Cargo.toml` 三处版本号，推送 `v*` tag 到 GitHub 后 **Actions 自动打 macOS（arm + Intel）+ Windows 包**，无需 Intel Mac 或 Windows 打包机。
 
-发版后：GitHub Releases 检查 Draft → Windows 验收 → 安装包上传 [Gitee Release](https://gitee.com/webhwh/vibestart/releases)。
+发版后：GitHub Releases 检查 Draft → Publish；**Gitee 安装包在配置 `GITEE_TOKEN` 后由 Actions 自动同步**（见下方一次性配置）。
+
+**一次性配置 Gitee 自动同步：**
+
+1. Gitee → [私人令牌](https://gitee.com/profile/personal_access_tokens) → 勾选 **projects** 读写  
+2. GitHub 仓库 → **Settings → Secrets and variables → Actions** → New secret → 名称 `GITEE_TOKEN`  
+3. 之后 `./scripts/release.sh` 推 tag，Actions 打完包会自动上传到 [Gitee Release](https://gitee.com/webhwh/vibestart/releases)
+
+未配置 token 时，可本地补救：
+
+```bash
+GITEE_TOKEN=xxx GH_TOKEN=xxx ./scripts/sync-gitee-release.sh v0.1.0
+```
 
 ### 手动发版
 

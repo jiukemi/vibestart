@@ -273,10 +273,32 @@ ffmpeg -f concat -safe 0 -i list.txt -c copy out/merged.mp4
 
 ---
 
-## 6. 介绍站下载区（landing-page 模板）
+## 6. 介绍站下载页（`site/`）
 
-用 VibeStart 向导选 **产品落地页**，部署后把 Releases 链接写进 CTA。  
-下载区 HTML 示例（纯 HTML/CSS，兼容明暗模式）：
+仓库内已包含可独立部署的下载页：[site/index.html](../site/index.html)
+
+- 自动识别 macOS / Windows 并勾选对应平台（含 Apple Silicon / Intel）
+- 探测 GitHub 可达性：外网走 GitHub Releases，否则 Gitee 国内镜像
+- 支持手动切换平台与下载线路；移动端提示「请在电脑下载」
+- 明暗主题；粒子网格背景交互
+
+**本地预览：**
+
+```bash
+cd site && python3 -m http.server 8787
+# 打开 http://localhost:8787
+```
+
+**部署 Gitee Pages：** 仓库设置 → Pages → 部署目录选 `site`（或单独建 pages 分支只含 site 内容）。
+
+**部署 Vercel：** Root Directory 填 `site`，Framework Preset 选 Other。
+
+发版时 `./scripts/release.sh` 会同步 `site/js/config.js` 中的版本号与安装包文件名。
+
+成片结尾 QR 码指向介绍站 `#download` 锚点。
+
+<details>
+<summary>旧版 HTML 片段（已弃用，仅供参考）</summary>
 
 ```html
 <section id="download" class="download">
@@ -306,7 +328,7 @@ ffmpeg -f concat -safe 0 -i list.txt -c copy out/merged.mp4
 .btn.primary { background: #3b82f6; color: #fff; padding: 12px 24px; border-radius: 8px; }
 ```
 
-成片结尾 QR 码指向同一介绍站 `#download` 锚点。
+</details>
 
 ---
 

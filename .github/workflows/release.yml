@@ -62,3 +62,43 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  sync-gitee:
+    name: Sync to Gitee Release
+    needs: publish
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for GitHub Release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          for i in $(seq 1 30); do
+            COUNT=$(curl -sS \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}" \
+              | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('assets') or []))" 2>/dev/null || echo 0)
+            echo "GitHub Release 附件数: ${COUNT} (尝试 ${i}/30)"
+            if [[ "$COUNT" -ge 2 ]]; then
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "警告: 附件可能尚未全部就绪，继续尝试同步"
+
+      - name: Upload assets to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ -z "${GITEE_TOKEN:-}" ]]; then
+            echo "跳过: 未配置 GITEE_TOKEN secret"
+            echo "配置后下次发版将自动同步到 Gitee，无需手动上传"
+            exit 0
+          fi
+          chmod +x scripts/sync-gitee-release.sh
+          ./scripts/sync-gitee-release.sh "${GITHUB_REF_NAME}"

@@ -59,7 +59,7 @@ PKG_JSON="$ROOT/package.json"
 TAURI_CONF="$ROOT/src-tauri/tauri.conf.json"
 CARGO_TOML="$ROOT/src-tauri/Cargo.toml"
 
-for f in "$PKG_JSON" "$TAURI_CONF" "$CARGO_TOML"; do
+for f in "$PKG_JSON" "$TAURI_CONF" "$CARGO_TOML" "$ROOT/site/js/config.js"; do
   if [[ ! -f "$f" ]]; then
     echo "错误: 找不到 $f" >&2
     exit 1
@@ -143,6 +143,27 @@ if n != 1:
     raise SystemExit("无法在 Cargo.toml 中更新 version 字段")
 cargo_path.write_text(cargo_text, encoding="utf-8")
 
+site_config = root / "site" / "js" / "config.js"
+if site_config.exists():
+    tag = f"v{version}"
+    site_config.write_text(
+        f'''/** 发版时由 scripts/release.sh 自动同步 version / tag / assets */
+window.VIBESTART_RELEASE = {{
+  version: "{version}",
+  tag: "{tag}",
+  product: "VibeStart",
+  github: {{ owner: "jiukemi", repo: "vibestart" }},
+  gitee: {{ owner: "webhwh", repo: "vibestart" }},
+  assets: {{
+    macArm: "VibeStart_{version}_aarch64.dmg",
+    macIntel: "VibeStart_{version}_x64.dmg",
+    win: "VibeStart_{version}_x64-setup.exe",
+  }},
+}};
+''',
+        encoding="utf-8",
+    )
+
 print(version)
 PY
 }
@@ -215,7 +236,7 @@ echo "==> 写入版本号 ${NEXT}"
 if [[ "$NEXT" != "$CURRENT" ]]; then
   write_versions "$NEXT" >/dev/null
   echo "==> 提交"
-  git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
+  git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml site/js/config.js
   git commit -m "$(cat <<EOF
 chore: release ${TAG}
 
@@ -241,10 +262,12 @@ echo ""
 echo "完成: ${TAG}"
 echo ""
 echo "下一步:"
-echo "  1. GitHub → Actions → release  workflow 跑完后"
-echo "  2. GitHub → Releases → 检查 Draft，发布"
-echo "  3. 下载 .dmg / .exe，Windows 上验收"
-echo "  4. 上传到 Gitee Release: https://gitee.com/webhwh/vibestart/releases"
+echo "  1. GitHub → Actions → release workflow 跑完后"
+echo "  2. GitHub → Releases → 检查 Draft，确认附件齐全后 Publish"
+echo "  3. Gitee Release：若已配置 GitHub Secret GITEE_TOKEN，Actions 会自动同步安装包"
+echo "     否则手动: GITEE_TOKEN=xxx ./scripts/sync-gitee-release.sh ${TAG}"
+echo "  4. Windows 上安装验收 → 介绍站 site/ 已指向 ${TAG} 下载链"
 echo ""
 echo "  GitHub Actions: $(git remote get-url "$GITHUB_REMOTE" | sed 's/\.git$//')/actions"
-echo "  Releases:       $(git remote get-url "$GITHUB_REMOTE" | sed 's/\.git$//')/releases"
+echo "  GitHub Releases: $(git remote get-url "$GITHUB_REMOTE" | sed 's/\.git$//')/releases"
+echo "  Gitee Releases: https://gitee.com/webhwh/vibestart/releases/tag/${TAG}"
