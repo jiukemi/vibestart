@@ -8,7 +8,7 @@
       content="VibeStart — 零基础 Vibe Coding 桌面向导。macOS 与 Windows 免费下载。"
     />
     <title>VibeStart · 免费下载</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop stop-color='%2338bdf8'/%3E%3Cstop offset='1' stop-color='%236366f1'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Cpath fill='white' d='M8 22V10l8 6 8-6v12h-3.2V14.8L16 19.2 8 14.8V22z'/%3E%3C/svg%3E" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop stop-color='%23818cf8'/%3E%3Cstop offset='1' stop-color='%2338bdf8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='9' fill='url(%23g)'/%3E%3Cpath fill='white' d='M8 22V10l8 6 8-6v12h-3.2V14.8L16 19.2 8 14.8V22z'/%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
+    <div class="bg-mesh" aria-hidden="true"></div>
     <canvas id="grid-canvas" aria-hidden="true"></canvas>
 
     <div class="page">
@@ -31,98 +32,80 @@
           </div>
           <span>VibeStart</span>
         </div>
-        <div class="topbar-actions">
-          <button
-            id="theme-toggle"
-            class="icon-btn"
-            type="button"
-            aria-label="切换明暗主题"
-            title="切换主题"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="4" />
-              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-            </svg>
-          </button>
-        </div>
+        <button
+          id="theme-toggle"
+          class="icon-btn"
+          type="button"
+          aria-label="切换明暗主题"
+          title="切换主题"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+          </svg>
+        </button>
       </header>
 
       <section class="hero">
         <div class="eyebrow">
           <span class="pulse-dot" aria-hidden="true"></span>
-          <span>预览版 v<span data-version>0.1.0</span> · 免费桌面应用</span>
+          <span>v<span data-version>0.1.0</span> · 自动读取最新 Release</span>
         </div>
-        <h1>零基础，也能发出第一个链接</h1>
+        <h1>
+          <span class="gradient">零基础，发出第一个链接</span>
+        </h1>
         <p>
-          配环境、写提示词、搭 demo、一键部署 —— VibeStart 把 Vibe Coding 入门收进一个桌面向导。
+          配环境、写提示词、搭 demo、一键部署 —— Vibe Coding 入门，收进一个桌面向导。
         </p>
       </section>
 
       <section id="download" class="download-card" aria-labelledby="download-title">
         <div class="card-head">
-          <h2 id="download-title">选择你的平台</h2>
+          <h2 id="download-title">选择平台下载</h2>
           <div id="mirror-badge" class="mirror-badge" data-state="probing">
             <span class="badge-icon" aria-hidden="true">◎</span>
-            <span id="mirror-badge-text">正在检测最佳下载线路…</span>
+            <span id="mirror-badge-text">检测线路…</span>
           </div>
         </div>
 
-        <p id="detect-hint" class="meta-line" style="margin-top: 0; margin-bottom: 16px"></p>
+        <p id="detect-hint" class="detect-hint"></p>
 
         <div class="platform-grid" role="radiogroup" aria-label="下载平台">
-          <button
-            type="button"
-            class="platform-option"
-            data-platform="mac-arm"
-            role="radio"
-            aria-checked="true"
-          >
-            <span class="platform-icon" aria-hidden="true">🍎</span>
+          <button type="button" class="platform-option" data-platform="mac-arm" role="radio" aria-checked="true">
+            <span class="platform-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+            </span>
             <span class="platform-label">macOS</span>
-            <span class="platform-sub">Apple Silicon (M 系列)</span>
+            <span class="platform-sub">Apple Silicon</span>
           </button>
-          <button
-            type="button"
-            class="platform-option"
-            data-platform="mac-intel"
-            role="radio"
-            aria-checked="false"
-          >
-            <span class="platform-icon" aria-hidden="true">🍎</span>
+          <button type="button" class="platform-option" data-platform="mac-intel" role="radio" aria-checked="false">
+            <span class="platform-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+            </span>
             <span class="platform-label">macOS</span>
             <span class="platform-sub">Intel 芯片</span>
           </button>
-          <button
-            type="button"
-            class="platform-option"
-            data-platform="win"
-            role="radio"
-            aria-checked="false"
-          >
-            <span class="platform-icon" aria-hidden="true">🪟</span>
+          <button type="button" class="platform-option" data-platform="win" role="radio" aria-checked="false">
+            <span class="platform-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.5 4.2v7.6H3V5.5zm0 8.3h7.5v7.6L3 20.1v-6.3zm9-9.4L21 3.1v8.6h-9V4.4zm0 10.2h9V23l-9-1.5v-7.9z"/></svg>
+            </span>
             <span class="platform-label">Windows</span>
-            <span class="platform-sub">Windows 10 / 11 x64</span>
+            <span class="platform-sub">10 / 11 x64</span>
           </button>
         </div>
 
         <div class="mirror-toggle" role="group" aria-label="下载线路">
-          <button type="button" class="mirror-chip" data-mirror="auto" aria-pressed="true">
-            自动选线
-          </button>
-          <button type="button" class="mirror-chip" data-mirror="github" aria-pressed="false">
-            GitHub（外网）
-          </button>
-          <button type="button" class="mirror-chip" data-mirror="gitee" aria-pressed="false">
-            Gitee（国内）
-          </button>
+          <button type="button" class="mirror-chip" data-mirror="auto" aria-pressed="true">自动选线</button>
+          <button type="button" class="mirror-chip" data-mirror="github" aria-pressed="false">GitHub</button>
+          <button type="button" class="mirror-chip" data-mirror="gitee" aria-pressed="false">Gitee</button>
         </div>
 
         <div class="download-row">
           <a id="download-btn" class="btn-download" href="#" rel="noopener">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
             </svg>
-            <span id="download-label">下载 macOS 版</span>
+            <span id="download-label">下载</span>
           </a>
           <button id="copy-link-btn" type="button" class="btn-secondary">复制直链</button>
         </div>
@@ -130,20 +113,23 @@
         <p id="download-meta" class="meta-line"></p>
 
         <div id="mobile-notice" class="mobile-notice" data-visible="false">
-          移动端无法安装桌面应用。请复制链接，在 Mac 或 Windows 电脑浏览器中打开下载。
+          移动端无法安装桌面应用。请复制链接，在 Mac 或 Windows 电脑浏览器中打开。
         </div>
       </section>
 
       <section class="features" aria-label="产品亮点">
         <article class="feature">
+          <span class="feature-num">01</span>
           <strong>极速轨向导</strong>
           <span>检测环境、配 API Key、选 IDE，按步骤走完就能跑起来。</span>
         </article>
         <article class="feature">
+          <span class="feature-num">02</span>
           <strong>双平台原生</strong>
           <span>macOS 与 Windows 桌面应用，不是网页套壳。</span>
         </article>
         <article class="feature">
+          <span class="feature-num">03</span>
           <strong>国内友好</strong>
           <span>镜像加速、Gitee 部署默认项，访问更稳。</span>
         </article>
@@ -151,12 +137,11 @@
 
       <footer>
         <p>
-          源码：
           <a href="https://gitee.com/webhwh/vibestart" target="_blank" rel="noopener">Gitee</a>
           ·
           <a href="https://github.com/jiukemi/vibestart" target="_blank" rel="noopener">GitHub</a>
         </p>
-        <p style="margin-top: 8px">首次安装若提示安全警告，请按系统指引允许打开（未签名预览版）。</p>
+        <p style="margin-top: 10px">首次安装若提示安全警告，请按系统指引允许打开（未签名预览版）。</p>
       </footer>
     </div>
 
@@ -164,5 +149,3 @@
     <script src="js/main.js"></script>
   </body>
 </html>
-
-<!-- 部署：Gitee Pages 选 site/ 目录，或 Vercel 根目录指向 site -->

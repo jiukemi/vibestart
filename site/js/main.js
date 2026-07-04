@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  const cfg = window.VIBESTART_RELEASE;
-  if (!cfg) return;
+  const cfg = { ...window.VIBESTART_RELEASE };
+  if (!cfg.github || !cfg.gitee) return;
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -12,13 +12,14 @@
     mirror: "auto",
     resolvedMirror: "gitee",
     probing: true,
+    releaseSource: "fallback",
     detectedOs: "unknown",
   };
 
   const PLATFORM_LABELS = {
-    "mac-arm": { icon: "🍎", label: "macOS", sub: "Apple Silicon (M 系列)" },
-    "mac-intel": { icon: "🍎", label: "macOS", sub: "Intel 芯片" },
-    win: { icon: "🪟", label: "Windows", sub: "Windows 10 / 11 x64" },
+    "mac-arm": { label: "macOS", sub: "Apple Silicon (M 系列)" },
+    "mac-intel": { label: "macOS", sub: "Intel 芯片" },
+    win: { label: "Windows", sub: "Windows 10 / 11 x64" },
   };
 
   function buildUrl(mirror, platform) {
@@ -30,16 +31,88 @@
           ? assets.macIntel
           : assets.win;
 
+    if (!file) return "#";
+
     if (mirror === "github") {
       return `https://github.com/${github.owner}/${github.repo}/releases/download/${tag}/${file}`;
     }
     return `https://gitee.com/${gitee.owner}/${gitee.repo}/releases/download/${tag}/${file}`;
   }
 
+  function matchAssets(names) {
+    let macArm;
+    let macIntel;
+    let win;
+    for (const name of names) {
+      const n = name.toLowerCase();
+      if (n.includes("aarch64") && n.endsWith(".dmg")) macArm = name;
+      else if (n.includes("x64-setup") && n.endsWith(".exe")) win = name;
+      else if (n.endsWith(".dmg") && n.includes("x64") && !n.includes("aarch64")) macIntel = name;
+      else if (n.endsWith(".exe") && n.includes("setup")) win = win || name;
+    }
+    return { macArm, macIntel, win };
+  }
+
+  function applyRelease(tag, assetNames, source) {
+    const version = tag.replace(/^v/i, "");
+    const assets = matchAssets(assetNames);
+    cfg.tag = tag;
+    cfg.version = version;
+    cfg.assets = { ...cfg.assets, ...Object.fromEntries(Object.entries(assets).filter(([, v]) => v)) };
+    state.releaseSource = source;
+  }
+
+  async function fetchGithubLatest() {
+    const { owner, repo } = cfg.github;
+    const res = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/releases/latest`,
+      {
+        headers: { Accept: "application/vnd.github+json" },
+        cache: "no-store",
+        signal: AbortSignal.timeout(6000),
+      },
+    );
+    if (!res.ok) throw new Error(`GitHub ${res.status}`);
+    const data = await res.json();
+    const names = (data.assets || []).map((a) => a.name);
+    if (!names.length) throw new Error("no assets");
+    applyRelease(data.tag_name, names, "github");
+    return true;
+  }
+
+  async function fetchGiteeLatest() {
+    const { owner, repo } = cfg.gitee;
+    const res = await fetch(
+      `https://gitee.com/api/v5/repos/${owner}/${repo}/releases/latest`,
+      { cache: "no-store", signal: AbortSignal.timeout(6000) },
+    );
+    if (!res.ok) throw new Error(`Gitee ${res.status}`);
+    const data = await res.json();
+    if (data.message) throw new Error(data.message);
+    const names = (data.assets || []).map((a) => a.name).filter(Boolean);
+    if (!names.length) throw new Error("no assets");
+    applyRelease(data.tag_name, names, "gitee");
+    return true;
+  }
+
+  async function loadLatestRelease(preferredMirror) {
+    const order =
+      preferredMirror === "github" ? ["github", "gitee"] : ["gitee", "github"];
+    for (const src of order) {
+      try {
+        if (src === "github") await fetchGithubLatest();
+        else await fetchGiteeLatest();
+        return;
+      } catch {
+        /* try next */
+      }
+    }
+    state.releaseSource = "fallback";
+  }
+
   function detectOs() {
     const ua = navigator.userAgent || "";
     const platform = navigator.platform || "";
-
     if (/Win/i.test(ua) || /Win/i.test(platform)) return "win";
     if (/Mac/i.test(ua) || /Mac/i.test(platform)) return "mac";
     if (/iPhone|iPad|iPod|Android/i.test(ua)) return "mobile";
@@ -49,8 +122,7 @@
   function detectMacArch() {
     try {
       const canvas = document.createElement("canvas");
-      const gl =
-        canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+      const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
       if (!gl) return "mac-arm";
       const ext = gl.getExtension("WEBGL_debug_renderer_info");
       if (!ext) return "mac-arm";
@@ -121,7 +193,7 @@
 
     if (state.probing) {
       badge.dataset.state = "probing";
-      text.textContent = "正在检测最佳下载线路…";
+      text.textContent = "检测线路…";
       return;
     }
 
@@ -129,9 +201,9 @@
     badge.dataset.state = m;
     if (m === "github") {
       const ms = state.githubLatency ? ` · ${state.githubLatency}ms` : "";
-      text.textContent = `GitHub 国际线路${ms}`;
+      text.textContent = `GitHub${ms}`;
     } else {
-      text.textContent = "Gitee 国内镜像";
+      text.textContent = "Gitee 国内";
     }
   }
 
@@ -144,38 +216,48 @@
     const dlBtn = $("#download-btn");
     const dlLabel = $("#download-label");
     const meta = $("#download-meta");
+    const url = buildUrl(activeMirror(), state.platform);
+    const hasAsset = url !== "#";
 
     if (dlBtn) {
-      dlBtn.href = buildUrl(activeMirror(), state.platform);
-      dlBtn.setAttribute("download", "");
+      dlBtn.href = hasAsset ? url : "#";
+      dlBtn.setAttribute("aria-disabled", hasAsset ? "false" : "true");
+      if (hasAsset) dlBtn.setAttribute("download", "");
+      else dlBtn.removeAttribute("download");
     }
     if (dlLabel) {
-      dlLabel.textContent = `下载 ${info.label} 版`;
+      dlLabel.textContent = hasAsset ? `下载 ${info.label} 版` : "该版本暂无此平台安装包";
     }
     if (meta) {
-      const mirrorName = activeMirror() === "github" ? "GitHub Releases" : "Gitee Releases";
-      meta.textContent = `${info.sub} · ${cfg.version} · 来源 ${mirrorName}`;
+      const mirrorName = activeMirror() === "github" ? "GitHub" : "Gitee";
+      const src =
+        state.releaseSource === "fallback"
+          ? "本地兜底配置"
+          : `Release API · ${state.releaseSource}`;
+      meta.textContent = `${info.sub} · v${cfg.version} · ${mirrorName} · ${src}`;
     }
+
+    $$("[data-version]").forEach((el) => {
+      el.textContent = cfg.version;
+    });
 
     $$(".mirror-chip").forEach((chip) => {
       chip.setAttribute("aria-pressed", chip.dataset.mirror === state.mirror ? "true" : "false");
     });
 
     const notice = $("#mobile-notice");
-    if (notice) {
-      notice.dataset.visible = state.detectedOs === "mobile" ? "true" : "false";
-    }
+    if (notice) notice.dataset.visible = state.detectedOs === "mobile" ? "true" : "false";
 
     const detectHint = $("#detect-hint");
     if (detectHint) {
       if (state.detectedOs === "mobile") {
-        detectHint.textContent = "检测到移动设备，请在 Mac 或 Windows 电脑上下载安装";
+        detectHint.textContent = "检测到移动设备，请在 Mac 或 Windows 电脑上下载";
       } else if (state.detectedOs === "win") {
         detectHint.textContent = "已识别 Windows，已为你勾选 Windows 版";
       } else if (state.detectedOs === "mac") {
-        detectHint.textContent = `已识别 macOS，已勾选 ${PLATFORM_LABELS[state.platform].sub}`;
+        detectHint.textContent = `已识别 macOS · ${PLATFORM_LABELS[state.platform].sub}`;
       } else {
-        detectHint.textContent = "未识别桌面系统，默认推荐 macOS Apple Silicon";
+        detectHint.textContent = "未识别桌面系统，默认推荐 Apple Silicon";
       }
     }
   }
@@ -198,38 +280,37 @@
           state.resolvedMirror = state.mirror;
           updateMirrorBadge();
         }
+        await loadLatestRelease(activeMirror());
         updatePlatformUI();
       });
     });
 
-    const themeBtn = $("#theme-toggle");
-    if (themeBtn) {
-      themeBtn.addEventListener("click", () => {
-        const html = document.documentElement;
-        const current = html.dataset.theme;
-        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        const next =
-          current === "dark" || (!current && prefersDark) ? "light" : "dark";
-        html.dataset.theme = next;
-        localStorage.setItem("vibestart-theme", next);
-      });
-    }
+    $("#theme-toggle")?.addEventListener("click", () => {
+      const html = document.documentElement;
+      const current = html.dataset.theme;
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const next = current === "dark" || (!current && prefersDark) ? "light" : "dark";
+      html.dataset.theme = next;
+      localStorage.setItem("vibestart-theme", next);
+    });
 
-    const copyBtn = $("#copy-link-btn");
-    if (copyBtn) {
-      copyBtn.addEventListener("click", async () => {
-        const url = buildUrl(activeMirror(), state.platform);
-        try {
-          await navigator.clipboard.writeText(url);
-          copyBtn.textContent = "已复制链接";
-          setTimeout(() => {
-            copyBtn.textContent = "复制直链";
-          }, 2000);
-        } catch {
-          copyBtn.textContent = "复制失败";
-        }
-      });
-    }
+    $("#copy-link-btn")?.addEventListener("click", async () => {
+      const url = buildUrl(activeMirror(), state.platform);
+      const btn = $("#copy-link-btn");
+      if (url === "#") {
+        btn.textContent = "暂无直链";
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(url);
+        btn.textContent = "已复制";
+        setTimeout(() => {
+          btn.textContent = "复制直链";
+        }, 2000);
+      } catch {
+        btn.textContent = "复制失败";
+      }
+    });
 
     $("#download-btn")?.addEventListener("click", (e) => {
       if (state.detectedOs === "mobile") {
@@ -246,14 +327,6 @@
     }
   }
 
-  function initVersion() {
-    const v = cfg.version;
-    $$("[data-version]").forEach((el) => {
-      el.textContent = v;
-    });
-  }
-
-  /* Particle grid background */
   function initCanvas() {
     const canvas = $("#grid-canvas");
     if (!canvas) return;
@@ -262,19 +335,18 @@
     let h = 0;
     let mouse = { x: -9999, y: -9999 };
     const particles = [];
-    const count = () => Math.min(80, Math.floor((w * h) / 18000));
+    const count = () => Math.min(64, Math.floor((w * h) / 22000));
 
     function resize() {
       w = canvas.width = window.innerWidth;
       h = canvas.height = window.innerHeight;
       particles.length = 0;
-      const n = count();
-      for (let i = 0; i < n; i++) {
+      for (let i = 0; i < count(); i++) {
         particles.push({
           x: Math.random() * w,
           y: Math.random() * h,
-          vx: (Math.random() - 0.5) * 0.35,
-          vy: (Math.random() - 0.5) * 0.35,
+          vx: (Math.random() - 0.5) * 0.28,
+          vy: (Math.random() - 0.5) * 0.28,
         });
       }
     }
@@ -283,20 +355,14 @@
       mouse.x = e.clientX;
       mouse.y = e.clientY;
     });
-    window.addEventListener("mouseleave", () => {
-      mouse.x = -9999;
-      mouse.y = -9999;
-    });
     window.addEventListener("resize", resize);
     resize();
 
-    const accent = getComputedStyle(document.documentElement)
-      .getPropertyValue("--accent")
-      .trim();
+    const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
 
     function loop() {
       ctx.clearRect(0, 0, w, h);
-      const linkDist = 120;
+      const linkDist = 110;
 
       for (const p of particles) {
         p.x += p.vx;
@@ -307,15 +373,15 @@
         const dx = mouse.x - p.x;
         const dy = mouse.y - p.y;
         const dist = Math.hypot(dx, dy);
-        if (dist < 140) {
-          p.x -= dx * 0.012;
-          p.y -= dy * 0.012;
+        if (dist < 120) {
+          p.x -= dx * 0.008;
+          p.y -= dy * 0.008;
         }
 
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 1.2, 0, Math.PI * 2);
-        ctx.fillStyle = accent || "#38bdf8";
-        ctx.globalAlpha = 0.55;
+        ctx.arc(p.x, p.y, 1, 0, Math.PI * 2);
+        ctx.fillStyle = accent || "#818cf8";
+        ctx.globalAlpha = 0.4;
         ctx.fill();
       }
 
@@ -328,8 +394,8 @@
             ctx.beginPath();
             ctx.moveTo(a.x, a.y);
             ctx.lineTo(b.x, b.y);
-            ctx.strokeStyle = accent || "#38bdf8";
-            ctx.globalAlpha = (1 - d / linkDist) * 0.12;
+            ctx.strokeStyle = accent || "#818cf8";
+            ctx.globalAlpha = (1 - d / linkDist) * 0.08;
             ctx.lineWidth = 1;
             ctx.stroke();
           }
@@ -343,11 +409,11 @@
 
   async function init() {
     initTheme();
-    initVersion();
     state.platform = defaultPlatform();
     bindEvents();
     initCanvas();
     await resolveMirror();
+    await loadLatestRelease(activeMirror());
     updatePlatformUI();
   }
 

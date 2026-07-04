@@ -1,4 +1,4 @@
-/** 发版时由 scripts/release.sh 自动同步 version / tag / assets */
+/** 兜底配置：API 拉取失败时使用；发版脚本仍会同步更新 */
 window.VIBESTART_RELEASE = {
   version: "0.1.0",
   tag: "v0.1.0",
