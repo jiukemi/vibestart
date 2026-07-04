@@ -376,7 +376,7 @@ fn scan_named_cli(name: &str, cmd: &str, args: &[&str]) -> ToolStatus {
 }
 
 fn scan_wechat_devtools() -> ToolStatus {
-    let paths: Vec<String> = if cfg!(target_os = "macos") {
+    let mut paths: Vec<String> = if cfg!(target_os = "macos") {
         vec![
             "/Applications/wechatwebdevtools.app".into(),
             "/Applications/微信开发者工具.app".into(),
