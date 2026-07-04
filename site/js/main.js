@@ -330,80 +330,100 @@
   function initCanvas() {
     const canvas = $("#grid-canvas");
     if (!canvas) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
     const ctx = canvas.getContext("2d");
     let w = 0;
     let h = 0;
-    let mouse = { x: -9999, y: -9999 };
-    const particles = [];
-    const count = () => Math.min(64, Math.floor((w * h) / 22000));
+    let columns = 0;
+    let drops = [];
+    let fontSize = 15;
+
+    /* Matrix 风格字符集：片假名 + 数字 + 代码符号 */
+    const GLYPHS =
+      "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン" +
+      "0123456789" +
+      "<>{}[]/\\|_-=+*&$#@%";
+
+    function isDark() {
+      const theme = document.documentElement.dataset.theme;
+      if (theme === "dark") return true;
+      if (theme === "light") return false;
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+
+    function colors() {
+      if (isDark()) {
+        return {
+          fade: "rgba(3, 7, 18, 0.08)",
+          head: "#6ee7b7",
+          trail: "#34d399",
+          dim: "rgba(52, 211, 153, 0.35)",
+        };
+      }
+      return {
+        fade: "rgba(250, 250, 250, 0.12)",
+        head: "#059669",
+        trail: "#10b981",
+        dim: "rgba(16, 185, 129, 0.22)",
+      };
+    }
 
     function resize() {
       w = canvas.width = window.innerWidth;
       h = canvas.height = window.innerHeight;
-      particles.length = 0;
-      for (let i = 0; i < count(); i++) {
-        particles.push({
-          x: Math.random() * w,
-          y: Math.random() * h,
-          vx: (Math.random() - 0.5) * 0.28,
-          vy: (Math.random() - 0.5) * 0.28,
-        });
-      }
+      fontSize = Math.max(13, Math.min(16, Math.floor(w / 90)));
+      columns = Math.ceil(w / fontSize);
+      drops = Array.from({ length: columns }, () => Math.random() * -40);
     }
 
-    window.addEventListener("mousemove", (e) => {
-      mouse.x = e.clientX;
-      mouse.y = e.clientY;
-    });
-    window.addEventListener("resize", resize);
-    resize();
-
-    const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+    function pickGlyph() {
+      return GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
+    }
 
     function loop() {
-      ctx.clearRect(0, 0, w, h);
-      const linkDist = 110;
+      const c = colors();
+      ctx.fillStyle = c.fade;
+      ctx.fillRect(0, 0, w, h);
 
-      for (const p of particles) {
-        p.x += p.vx;
-        p.y += p.vy;
-        if (p.x < 0 || p.x > w) p.vx *= -1;
-        if (p.y < 0 || p.y > h) p.vy *= -1;
+      ctx.font = `${fontSize}px "Geist Mono", "SF Mono", "Cascadia Code", monospace`;
+      const centerX = w * 0.5;
+      const fadeBand = Math.min(520, w * 0.55);
 
-        const dx = mouse.x - p.x;
-        const dy = mouse.y - p.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist < 120) {
-          p.x -= dx * 0.008;
-          p.y -= dy * 0.008;
+      for (let i = 0; i < drops.length; i++) {
+        const x = i * fontSize;
+        const dist = Math.abs(x - centerX);
+        const edgeBoost = dist > fadeBand ? 1 : (dist / fadeBand) * 0.45 + 0.12;
+
+        const y = drops[i] * fontSize;
+        const glyph = pickGlyph();
+
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = c.trail;
+        ctx.fillStyle = c.head;
+        ctx.globalAlpha = Math.min(1, 0.55 + edgeBoost * 0.45);
+        ctx.fillText(glyph, x, y);
+
+        if (Math.random() > 0.985) {
+          ctx.fillStyle = c.dim;
+          ctx.globalAlpha = 0.35 * edgeBoost;
+          ctx.fillText(pickGlyph(), x, y - fontSize * 1.6);
         }
 
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 1, 0, Math.PI * 2);
-        ctx.fillStyle = accent || "#818cf8";
-        ctx.globalAlpha = 0.4;
-        ctx.fill();
-      }
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
 
-      for (let i = 0; i < particles.length; i++) {
-        for (let j = i + 1; j < particles.length; j++) {
-          const a = particles[i];
-          const b = particles[j];
-          const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (d < linkDist) {
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.lineTo(b.x, b.y);
-            ctx.strokeStyle = accent || "#818cf8";
-            ctx.globalAlpha = (1 - d / linkDist) * 0.08;
-            ctx.lineWidth = 1;
-            ctx.stroke();
-          }
+        if (y > h && Math.random() > 0.975) {
+          drops[i] = Math.random() * -30;
         }
+        drops[i] += 0.45 + Math.random() * 0.65;
       }
 
       requestAnimationFrame(loop);
     }
+
+    window.addEventListener("resize", resize);
+    resize();
     loop();
   }
 
