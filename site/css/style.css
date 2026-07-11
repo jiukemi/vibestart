@@ -3,6 +3,8 @@
   --bg: #fafafa;
   --bg-mesh-1: rgba(99, 102, 241, 0.07);
   --bg-mesh-2: rgba(14, 165, 233, 0.06);
+  --bg-mesh-3: rgba(139, 92, 246, 0.05);
+  --bg-dot: rgba(99, 102, 241, 0.07);
   --surface: rgba(255, 255, 255, 0.78);
   --surface-strong: #ffffff;
   --text: #0a0a0b;
@@ -23,6 +25,8 @@ html[data-theme="dark"] {
   --bg: #030712;
   --bg-mesh-1: rgba(99, 102, 241, 0.14);
   --bg-mesh-2: rgba(56, 189, 248, 0.1);
+  --bg-mesh-3: rgba(167, 139, 250, 0.08);
+  --bg-dot: rgba(129, 140, 248, 0.12);
   --surface: rgba(15, 23, 42, 0.55);
   --surface-strong: rgba(15, 23, 42, 0.82);
   --text: #f8fafc;
@@ -40,6 +44,8 @@ html[data-theme="dark"] {
     --bg: #030712;
     --bg-mesh-1: rgba(99, 102, 241, 0.14);
     --bg-mesh-2: rgba(56, 189, 248, 0.1);
+    --bg-mesh-3: rgba(167, 139, 250, 0.08);
+    --bg-dot: rgba(129, 140, 248, 0.12);
     --surface: rgba(15, 23, 42, 0.55);
     --surface-strong: rgba(15, 23, 42, 0.82);
     --text: #f8fafc;
@@ -78,51 +84,31 @@ body {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background:
-    radial-gradient(ellipse 80% 50% at 20% -10%, var(--bg-mesh-1), transparent 55%),
-    radial-gradient(ellipse 60% 40% at 90% 10%, var(--bg-mesh-2), transparent 50%),
-    radial-gradient(ellipse 50% 30% at 50% 100%, var(--bg-mesh-1), transparent 60%);
+  overflow: hidden;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse 85% 55% at 8% -8%, var(--bg-mesh-1), transparent 52%),
+    radial-gradient(ellipse 65% 45% at 92% 0%, var(--bg-mesh-2), transparent 48%),
+    radial-gradient(ellipse 55% 40% at 78% 88%, var(--bg-mesh-3), transparent 50%),
+    radial-gradient(ellipse 50% 35% at 18% 92%, var(--bg-mesh-2), transparent 45%);
 }
 
-#grid-canvas {
-  position: fixed;
+.bg-mesh::before {
+  content: "";
+  position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 0;
+  background-image: radial-gradient(circle at 1px 1px, var(--bg-dot) 1px, transparent 0);
+  background-size: 28px 28px;
   opacity: 0.55;
-  /* 数字雨主要在两侧空白区，中间内容区淡化 */
-  -webkit-mask-image: radial-gradient(
-    ellipse 540px 88% at 50% 42%,
-    transparent 0%,
-    transparent 38%,
-    rgba(0, 0, 0, 0.25) 52%,
-    black 72%
-  );
-  mask-image: radial-gradient(
-    ellipse 540px 88% at 50% 42%,
-    transparent 0%,
-    transparent 38%,
-    rgba(0, 0, 0, 0.25) 52%,
-    black 72%
-  );
+  mask-image: radial-gradient(ellipse 90% 80% at 50% 35%, black 15%, transparent 72%);
 }
 
-html[data-theme="light"] #grid-canvas {
-  opacity: 0.28;
-}
-
-@media (prefers-color-scheme: light) {
-  html:not([data-theme="dark"]) #grid-canvas {
-    opacity: 0.28;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  #grid-canvas {
-    display: none;
-  }
+.bg-mesh::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 75% 65% at 50% 42%, transparent 35%, var(--bg) 100%);
+  opacity: 0.85;
 }
 
 .page {
@@ -228,25 +214,42 @@ html[data-theme="light"] #grid-canvas {
 }
 
 .hero h1 {
-  margin: 0 0 16px;
-  font-size: clamp(2.25rem, 5.5vw, 3.5rem);
-  font-weight: 650;
-  line-height: 1.05;
-  letter-spacing: -0.045em;
+  margin: 0 0 20px;
+  font-size: clamp(2rem, 5.8vw, 3.25rem);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.04em;
 }
 
 .hero h1 .gradient {
-  background: linear-gradient(120deg, var(--text) 20%, var(--accent) 55%, var(--accent-2) 100%);
+  display: inline;
+  background: linear-gradient(115deg, var(--accent) 0%, var(--accent-2) 55%, color-mix(in srgb, var(--accent-2) 70%, #fff) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  filter: drop-shadow(0 0 40px var(--glow));
 }
 
-.hero p {
+.hero-lead {
+  margin: 0 auto 12px;
+  max-width: 540px;
+  color: var(--text);
+  font-size: 1.125rem;
+  line-height: 1.6;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.hero-lead strong {
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.hero-sub {
   margin: 0 auto;
-  max-width: 520px;
+  max-width: 480px;
   color: var(--text-muted);
-  font-size: 1.0625rem;
+  font-size: 0.9375rem;
   line-height: 1.65;
   font-weight: 400;
 }

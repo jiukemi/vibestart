@@ -1,5 +1,11 @@
+# Dependencies & build output
+node_modules/
+dist/
+dist-ssr/
+mirror-out/
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,19 +13,56 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-mirror-out
-dist-ssr
-*.local
+# Secrets & credentials — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.json
+**/GITEE_TOKEN*
+**/GH_TOKEN*
 
-# Editor directories and files
+# Local / machine-specific
+*.local
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# TypeScript / test
+*.tsbuildinfo
+coverage/
+
+# Tauri / Rust (src-tauri/target is in src-tauri/.gitignore)
+src-tauri/target/
+
+# Release artifacts (local builds)
+*.dmg
+*.app
+*.msi
+*.exe
+!site/**
+
+# OS / temp
+*.bak
+*.tmp
+*~
+
+# Promo / video editing (Remotion, rendered clips, local assets)
+video/
+*.wav
+*.m4a
+

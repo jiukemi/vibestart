@@ -37,6 +37,23 @@ export interface SshKeyInfo {
   key_path: string;
 }
 
+export interface UpdateCheckResult {
+  current_version: string;
+  latest_version: string | null;
+  latest_tag: string | null;
+  update_available: boolean;
+  download_url: string | null;
+  release_page_url: string | null;
+  mirror: string;
+  message: string;
+}
+
+export interface DownloadUpdateResult {
+  success: boolean;
+  file_path: string | null;
+  message: string;
+}
+
 export interface DeployResult {
   success: boolean;
   url: string | null;

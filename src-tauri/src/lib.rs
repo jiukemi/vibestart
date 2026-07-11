@@ -16,6 +16,7 @@ mod os;
 mod project;
 mod ssh;
 mod tools_install;
+mod updater;
 
 use config::{LlmConfig, NetworkConfig, ToolsInstallConfig, ToolsInstallMode};
 use deploy::DeployResult;
@@ -26,6 +27,7 @@ use network::{GithubConnectivity, NetworkStatus};
 use os::OsInfo;
 use ssh::SshKeyInfo;
 use tauri::AppHandle;
+use updater::{DownloadUpdateResult, UpdateCheckResult};
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -260,6 +262,16 @@ fn open_external_browser(app: AppHandle, url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn check_for_update() -> UpdateCheckResult {
+    updater::check_for_update().await
+}
+
+#[tauri::command]
+async fn download_app_update(app: AppHandle) -> DownloadUpdateResult {
+    updater::download_app_update(app).await
+}
+
+#[tauri::command]
 fn open_builtin_browser(
     app: AppHandle,
     url: String,
@@ -454,6 +466,8 @@ pub fn run() {
             open_github_in_app,
             open_gitee_in_app,
             open_external_browser,
+            check_for_update,
+            download_app_update,
             open_builtin_browser,
             get_browser_config,
             save_browser_config,

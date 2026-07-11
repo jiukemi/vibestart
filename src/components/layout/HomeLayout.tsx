@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight, Moon, Sun } from "lucide-react";
 
+import { UpdateBanner } from "@/components/shared/UpdateBanner";
 import { HomeNav } from "@/components/home/HomeNav";
 import { TroubleshootPanel } from "@/components/layout/TroubleshootPanel";
 import { TopProgressBar } from "@/components/shared/TopProgressBar";
@@ -45,7 +46,10 @@ export function HomeLayout({
 
         <div className="flex min-h-0 flex-1">
           <main className="min-w-0 flex-1 overflow-y-auto p-4 md:p-8">
-            <div className="mx-auto w-full max-w-3xl">{children}</div>
+            <div className="mx-auto w-full max-w-3xl">
+              <UpdateBanner />
+              {children}
+            </div>
           </main>
 
           <aside

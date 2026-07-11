@@ -232,8 +232,8 @@
       const mirrorName = activeMirror() === "github" ? "GitHub" : "Gitee";
       const src =
         state.releaseSource === "fallback"
-          ? "本地兜底配置"
-          : `Release API · ${state.releaseSource}`;
+          ? "内置版本信息"
+          : "已同步最新安装包";
       meta.textContent = `${info.sub} · v${cfg.version} · ${mirrorName} · ${src}`;
     }
 
@@ -327,111 +327,10 @@
     }
   }
 
-  function initCanvas() {
-    const canvas = $("#grid-canvas");
-    if (!canvas) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
-    const ctx = canvas.getContext("2d");
-    let w = 0;
-    let h = 0;
-    let columns = 0;
-    let drops = [];
-    let fontSize = 15;
-
-    /* Matrix 风格字符集：片假名 + 数字 + 代码符号 */
-    const GLYPHS =
-      "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン" +
-      "0123456789" +
-      "<>{}[]/\\|_-=+*&$#@%";
-
-    function isDark() {
-      const theme = document.documentElement.dataset.theme;
-      if (theme === "dark") return true;
-      if (theme === "light") return false;
-      return window.matchMedia("(prefers-color-scheme: dark)").matches;
-    }
-
-    function colors() {
-      if (isDark()) {
-        return {
-          fade: "rgba(3, 7, 18, 0.08)",
-          head: "#6ee7b7",
-          trail: "#34d399",
-          dim: "rgba(52, 211, 153, 0.35)",
-        };
-      }
-      return {
-        fade: "rgba(250, 250, 250, 0.12)",
-        head: "#059669",
-        trail: "#10b981",
-        dim: "rgba(16, 185, 129, 0.22)",
-      };
-    }
-
-    function resize() {
-      w = canvas.width = window.innerWidth;
-      h = canvas.height = window.innerHeight;
-      fontSize = Math.max(13, Math.min(16, Math.floor(w / 90)));
-      columns = Math.ceil(w / fontSize);
-      drops = Array.from({ length: columns }, () => Math.random() * -40);
-    }
-
-    function pickGlyph() {
-      return GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
-    }
-
-    function loop() {
-      const c = colors();
-      ctx.fillStyle = c.fade;
-      ctx.fillRect(0, 0, w, h);
-
-      ctx.font = `${fontSize}px "Geist Mono", "SF Mono", "Cascadia Code", monospace`;
-      const centerX = w * 0.5;
-      const fadeBand = Math.min(520, w * 0.55);
-
-      for (let i = 0; i < drops.length; i++) {
-        const x = i * fontSize;
-        const dist = Math.abs(x - centerX);
-        const edgeBoost = dist > fadeBand ? 1 : (dist / fadeBand) * 0.45 + 0.12;
-
-        const y = drops[i] * fontSize;
-        const glyph = pickGlyph();
-
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = c.trail;
-        ctx.fillStyle = c.head;
-        ctx.globalAlpha = Math.min(1, 0.55 + edgeBoost * 0.45);
-        ctx.fillText(glyph, x, y);
-
-        if (Math.random() > 0.985) {
-          ctx.fillStyle = c.dim;
-          ctx.globalAlpha = 0.35 * edgeBoost;
-          ctx.fillText(pickGlyph(), x, y - fontSize * 1.6);
-        }
-
-        ctx.shadowBlur = 0;
-        ctx.globalAlpha = 1;
-
-        if (y > h && Math.random() > 0.975) {
-          drops[i] = Math.random() * -30;
-        }
-        drops[i] += 0.45 + Math.random() * 0.65;
-      }
-
-      requestAnimationFrame(loop);
-    }
-
-    window.addEventListener("resize", resize);
-    resize();
-    loop();
-  }
-
   async function init() {
     initTheme();
     state.platform = defaultPlatform();
     bindEvents();
-    initCanvas();
     await resolveMirror();
     await loadLatestRelease(activeMirror());
     updatePlatformUI();

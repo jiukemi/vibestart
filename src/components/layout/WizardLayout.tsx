@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, LayoutDashboard, Moon, RefreshCw, Sun } from
 
 import { Button } from "@/components/ui/button";
 import { TopProgressBar } from "@/components/shared/TopProgressBar";
+import { UpdateBanner } from "@/components/shared/UpdateBanner";
 import { TroubleshootPanel } from "@/components/layout/TroubleshootPanel";
 import { StepNav } from "@/components/wizard/StepNav";
 import { cn } from "@/lib/utils";
@@ -79,7 +80,10 @@ export function WizardLayout({
 
         <div className="flex min-h-0 flex-1">
           <main className="min-w-0 flex-1 overflow-y-auto p-4 md:p-8">
-            <div className="mx-auto w-full max-w-3xl">{children}</div>
+            <div className="mx-auto w-full max-w-3xl">
+              <UpdateBanner />
+              {children}
+            </div>
           </main>
 
           <aside
