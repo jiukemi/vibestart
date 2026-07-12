@@ -1,6 +1,6 @@
 [package]
 name = "vibestart"
-version = "0.1.1"
+version = "0.1.2"
 description = "VibeStart — 零基础 Vibe Coding 桌面向导"
 authors = ["you"]
 edition = "2021"
