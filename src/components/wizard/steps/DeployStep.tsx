@@ -60,8 +60,6 @@ export function DeployStep() {
       setSelection("deployTarget", "gitee-pages");
     } else if (gitProvider === "github" && selected === "gitee-pages") {
       setSelection("deployTarget", "github-pages");
-    } else if (gitProvider === "skip" && selected !== "vercel") {
-      setSelection("deployTarget", "vercel");
     }
   }, [deployOnly, gitProvider, selected, setSelection]);
 

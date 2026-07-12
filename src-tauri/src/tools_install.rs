@@ -185,7 +185,8 @@ pub fn which_in_system_path(cmd: &str) -> Option<PathBuf> {
     } else {
         "which"
     };
-    Command::new(probe)
+    let mut process = new_subprocess(probe);
+    process
         .arg(cmd)
         .output()
         .ok()
@@ -202,7 +203,7 @@ pub fn which_in_system_path(cmd: &str) -> Option<PathBuf> {
 /// Windows：`where npm` 首行常为无扩展名 Unix 脚本，直接 CreateProcess 会报 os error 193
 #[cfg(target_os = "windows")]
 fn which_npm_on_windows() -> Option<PathBuf> {
-    let output = Command::new("where").arg("npm").output().ok()?;
+    let output = new_subprocess("where").arg("npm").output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -294,7 +295,7 @@ pub fn resolve_system_node() -> Option<PathBuf> {
 
 #[cfg(target_os = "windows")]
 fn which_node_exe_on_windows() -> Option<PathBuf> {
-    let output = Command::new("where").arg("node").output().ok()?;
+    let output = new_subprocess("where").arg("node").output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -341,6 +342,23 @@ pub fn init_process_env() {
     refresh_windows_path_from_registry();
 }
 
+/// Windows 子进程隐藏控制台，避免环境扫描时连开多个 cmd 黑窗。
+#[cfg(target_os = "windows")]
+pub fn hide_console_window(cmd: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn hide_console_window(_cmd: &mut Command) {}
+
+pub fn new_subprocess(program: &str) -> Command {
+    let mut cmd = Command::new(program);
+    hide_console_window(&mut cmd);
+    cmd
+}
+
 #[cfg(target_os = "windows")]
 fn refresh_windows_path_from_registry() {
     let machine = read_registry_path(
@@ -363,7 +381,7 @@ fn refresh_windows_path_from_registry() {
 
 #[cfg(target_os = "windows")]
 fn read_registry_path(hive: &str, subkey: &str) -> Option<String> {
-    let out = Command::new("reg")
+    let out = new_subprocess("reg")
         .args(["query", &format!(r"{hive}\{subkey}"), "/v", "Path"])
         .output()
         .ok()?;
@@ -412,7 +430,7 @@ fn expand_windows_env_str(input: &str) -> String {
 /// Windows：`where` 可能先返回无扩展名脚本，需优先 `.cmd` / `.exe`
 #[cfg(target_os = "windows")]
 pub fn which_windows_cli(name: &str) -> Option<PathBuf> {
-    let output = Command::new("where").arg(name).output().ok()?;
+    let output = new_subprocess("where").arg(name).output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -442,20 +460,25 @@ pub fn which_windows_cli(_name: &str) -> Option<PathBuf> {
 pub fn new_executable_command(path: &Path) -> Command {
     #[cfg(target_os = "windows")]
     {
-        match path.extension().and_then(|e| e.to_str()) {
+        return match path.extension().and_then(|e| e.to_str()) {
             Some("cmd") | Some("bat") => {
-                let mut cmd = Command::new("cmd");
+                let mut cmd = new_subprocess("cmd");
                 cmd.arg("/C").arg(path);
-                return cmd;
+                cmd
             }
-            Some("exe") => {}
+            Some("exe") => {
+                let mut cmd = Command::new(path);
+                hide_console_window(&mut cmd);
+                cmd
+            }
             None | Some(_) => {
-                let mut cmd = Command::new("cmd");
+                let mut cmd = new_subprocess("cmd");
                 cmd.arg("/C").arg(path);
-                return cmd;
+                cmd
             }
-        }
+        };
     }
+    #[cfg(not(target_os = "windows"))]
     Command::new(path)
 }
 

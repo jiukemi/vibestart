@@ -57,8 +57,10 @@ export function DeployCards({
 }: DeployCardsProps) {
   const { open: openBrowser, loading: browserLoading } = useOpenInAppBrowser();
   const [browserHint, setBrowserHint] = useState<string | null>(null);
-  const showGithub = !expressMode && !deployOnlyMode && gitProvider === "github";
-  const showGitee = deployOnlyMode || (!expressMode && gitProvider === "gitee");
+  const showGithub =
+    !expressMode && !deployOnlyMode && gitProvider !== "gitee";
+  const showGitee =
+    deployOnlyMode || (!expressMode && gitProvider !== "github");
   const pagesUsername = showGitee ? giteeUsername : githubUsername;
 
   return (
@@ -66,7 +68,11 @@ export function DeployCards({
       <div
         className={cn(
           "grid gap-4",
-          showGithub || showGitee ? "lg:grid-cols-2" : "max-w-xl",
+          showGithub && showGitee
+            ? "lg:grid-cols-3"
+            : showGithub || showGitee
+              ? "lg:grid-cols-2"
+              : "max-w-xl",
           deployOnlyMode && "lg:grid-cols-2",
         )}
       >
@@ -271,10 +277,10 @@ export function DeployCards({
         )}
       </div>
 
-      {gitProvider === "skip" && !deployOnlyMode && (
+      {gitProvider === "skip" && !deployOnlyMode && !expressMode && (
         <p className="text-sm text-muted-foreground">
-          你选择了跳过 Git，推荐使用 Vercel 部署。若需 Pages，请回到「Git 托管」步骤配置
-          Gitee 或 GitHub。
+          你跳过了 Git 托管步骤，仍可选用下方 Gitee / GitHub Pages（填写用户名与仓库名）或
+          Vercel。若需 SSH 推送，请回到「Git 托管」完成配置。
         </p>
       )}
 

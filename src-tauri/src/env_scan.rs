@@ -191,7 +191,7 @@ fn gui_exe_from_electron_cli(cli: &std::path::Path, app_name: &str) -> Option<st
 
 #[cfg(target_os = "windows")]
 fn which_windows_exe(name: &str) -> Option<std::path::PathBuf> {
-    let output = Command::new("where").arg(name).output().ok()?;
+    let output = crate::tools_install::new_subprocess("where").arg(name).output().ok()?;
     if !output.status.success() {
         return None;
     }
