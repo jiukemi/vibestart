@@ -575,7 +575,12 @@ fn run_command_with_paths(
         &format!("正在执行 {program}…"),
         Some(15),
     );
-    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let resolved_args = if program == "winget" {
+        tools_install::winget_args(args)
+    } else {
+        args.to_vec()
+    };
+    let arg_refs: Vec<&str> = resolved_args.iter().map(String::as_str).collect();
 
     let mut cmd = if program == "npm" {
         match tools_install::resolve_system_npm() {
@@ -590,7 +595,7 @@ fn run_command_with_paths(
             }
         }
     } else {
-        Command::new(program)
+        tools_install::new_subprocess(program)
     };
     cmd.args(&arg_refs);
     if program == "npm" {
@@ -641,7 +646,7 @@ fn open_download_page(url: &str, name: &str) -> CommandResult {
             .map(|s| s.success())
             .unwrap_or(false)
     } else if cfg!(target_os = "windows") {
-        Command::new("cmd")
+        tools_install::new_subprocess("cmd")
             .args(["/C", "start", "", url])
             .status()
             .map(|s| s.success())
@@ -670,7 +675,7 @@ fn open_download_page(url: &str, name: &str) -> CommandResult {
 }
 
 pub fn run_command(program: &str, args: &[&str]) -> CommandResult {
-    match Command::new(program).args(args).output() {
+    match tools_install::new_subprocess(program).args(args).output() {
         Ok(output) => {
             let log = format!(
                 "$ {program} {}\n\n{}{}",

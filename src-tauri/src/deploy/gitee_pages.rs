@@ -1,5 +1,5 @@
 use super::DeployResult;
-use std::process::Command;
+use crate::tools_install;
 
 pub fn deploy_gitee_pages(project_dir: &str, username: &str, repo: &str) -> DeployResult {
     let remote = format!("git@gitee.com:{username}/{repo}.git");
@@ -16,9 +16,12 @@ pub fn deploy_gitee_pages(project_dir: &str, username: &str, repo: &str) -> Depl
 
     for (cmd, args) in steps {
         let output = if cmd == "init" {
-            Command::new("git").arg("init").current_dir(project_dir).output()
+            tools_install::new_subprocess("git")
+                .arg("init")
+                .current_dir(project_dir)
+                .output()
         } else {
-            let mut command = Command::new("git");
+            let mut command = tools_install::new_subprocess("git");
             command.arg(cmd).args(&args).current_dir(project_dir);
             command.output()
         };
@@ -32,7 +35,7 @@ pub fn deploy_gitee_pages(project_dir: &str, username: &str, repo: &str) -> Depl
                 ));
 
                 if cmd == "remote" && !o.status.success() {
-                    let set_url = Command::new("git")
+                    let set_url = tools_install::new_subprocess("git")
                         .args(["remote", "set-url", "origin", &remote])
                         .current_dir(project_dir)
                         .output();

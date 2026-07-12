@@ -14,7 +14,7 @@ pub fn ensure_key() -> Result<SshKeyInfo, String> {
 
     if !key_path.exists() {
         std::fs::create_dir_all(home.join(".ssh")).map_err(|e| e.to_string())?;
-        let output = Command::new("ssh-keygen")
+        let output = crate::tools_install::new_subprocess("ssh-keygen")
             .args(["-t", "ed25519", "-f"])
             .arg(&key_path)
             .args(["-N", ""])
@@ -37,7 +37,7 @@ pub fn ensure_key() -> Result<SshKeyInfo, String> {
 }
 
 pub fn test_gitee() -> Result<String, String> {
-    let out = Command::new("ssh")
+    let out = crate::tools_install::new_subprocess("ssh")
         .args(["-T", "-o", "StrictHostKeyChecking=accept-new", "git@gitee.com"])
         .output()
         .map_err(|e| e.to_string())?;
@@ -52,7 +52,7 @@ pub fn test_gitee() -> Result<String, String> {
 }
 
 pub fn test_github() -> Result<String, String> {
-    let out = Command::new("ssh")
+    let out = crate::tools_install::new_subprocess("ssh")
         .args(["-T", "-o", "StrictHostKeyChecking=accept-new", "git@github.com"])
         .output()
         .map_err(|e| e.to_string())?;

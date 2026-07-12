@@ -12,7 +12,14 @@ pub fn deploy_vercel(project_dir: &str) -> DeployResult {
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_else(|| "vercel".into());
 
-    let out = Command::new(&vercel)
+    let vercel_path = std::path::PathBuf::from(&vercel);
+    let mut cmd = if vercel_path.is_file() {
+        tools_install::new_executable_command(&vercel_path)
+    } else {
+        tools_install::new_subprocess(&vercel)
+    };
+    tools_install::apply_tool_runtime_env(&mut cmd);
+    let out = cmd
         .args(["--yes", "--prod"])
         .current_dir(project_dir)
         .output();

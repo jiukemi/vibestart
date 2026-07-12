@@ -197,7 +197,7 @@ fn detect_windows_proxy() -> Option<DetectedProxy> {
 
 #[cfg(target_os = "windows")]
 fn reg_query_u32(key: &str, value: &str) -> Option<u32> {
-    let output = Command::new("reg")
+    let output = crate::tools_install::new_subprocess("reg")
         .args(["query", key, "/v", value])
         .output()
         .ok()?;
@@ -218,7 +218,7 @@ fn reg_query_u32(key: &str, value: &str) -> Option<u32> {
 
 #[cfg(target_os = "windows")]
 fn reg_query_string(key: &str, value: &str) -> Option<String> {
-    let output = Command::new("reg")
+    let output = crate::tools_install::new_subprocess("reg")
         .args(["query", key, "/v", value])
         .output()
         .ok()?;
@@ -247,7 +247,7 @@ fn normalize_windows_proxy_addr(raw: &str) -> String {
 }
 
 fn read_git_http_proxy() -> Option<String> {
-    Command::new("git")
+    crate::tools_install::new_subprocess("git")
         .args(["config", "--global", "--get", "http.proxy"])
         .output()
         .ok()
@@ -290,7 +290,7 @@ pub fn apply_github_network(config: &NetworkConfig) -> Result<String, String> {
 }
 
 fn run_git(args: &[&str]) -> Result<(), String> {
-    let output = Command::new("git")
+    let output = crate::tools_install::new_subprocess("git")
         .args(args)
         .output()
         .map_err(|e| format!("无法运行 git: {e}"))?;

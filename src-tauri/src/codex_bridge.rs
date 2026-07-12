@@ -369,7 +369,7 @@ fn install_from_gitee_zip(
 
 fn try_git_clone_github(dir: &Path) -> String {
     let mut out = String::from("正在从 GitHub 克隆 codex-bridge（国内可能较慢）…\n");
-    let clone = Command::new("git")
+    let clone = crate::tools_install::new_subprocess("git")
         .args([
             "clone",
             "--depth",

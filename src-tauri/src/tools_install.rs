@@ -342,7 +342,7 @@ pub fn init_process_env() {
     refresh_windows_path_from_registry();
 }
 
-/// Windows 子进程隐藏控制台，避免环境扫描时连开多个 cmd 黑窗。
+/// Windows 子进程隐藏控制台，避免环境扫描 / 一键安装时连开多个 cmd 黑窗。
 #[cfg(target_os = "windows")]
 pub fn hide_console_window(cmd: &mut Command) {
     use std::os::windows::process::CommandExt;
@@ -357,6 +357,15 @@ pub fn new_subprocess(program: &str) -> Command {
     let mut cmd = Command::new(program);
     hide_console_window(&mut cmd);
     cmd
+}
+
+/// winget 默认加 `--disable-interactivity`，减少安装过程中的交互子进程。
+pub fn winget_args(args: &[String]) -> Vec<String> {
+    let mut out = args.to_vec();
+    if !out.iter().any(|a| a == "--disable-interactivity") {
+        out.push("--disable-interactivity".into());
+    }
+    out
 }
 
 #[cfg(target_os = "windows")]

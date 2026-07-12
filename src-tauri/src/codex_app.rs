@@ -843,7 +843,7 @@ fn which_codex_cli() -> Option<PathBuf> {
     } else {
         "which"
     };
-    Command::new(cmd)
+    crate::tools_install::new_subprocess(cmd)
         .arg("codex")
         .output()
         .ok()
@@ -1093,7 +1093,18 @@ fn run_logged_command(
         None,
     );
     log.push_str(&format!("$ {program} {}\n", args.join(" ")));
-    match Command::new(program).args(args).output() {
+    let exec_args: Vec<String> = if program == "winget" {
+        crate::tools_install::winget_args(
+            &args.iter().map(|s| (*s).to_string()).collect::<Vec<_>>(),
+        )
+    } else {
+        args.iter().map(|s| (*s).to_string()).collect()
+    };
+    let arg_refs: Vec<&str> = exec_args.iter().map(String::as_str).collect();
+    match crate::tools_install::new_subprocess(program)
+        .args(&arg_refs)
+        .output()
+    {
         Ok(output) => {
             let body = format!(
                 "{}{}",
@@ -1124,7 +1135,7 @@ fn open_url(url: &str) -> bool {
             .map(|s| s.success())
             .unwrap_or(false)
     } else if cfg!(target_os = "windows") {
-        Command::new("cmd")
+        crate::tools_install::new_subprocess("cmd")
             .args(["/C", "start", "", url])
             .status()
             .map(|s| s.success())

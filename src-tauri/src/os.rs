@@ -46,7 +46,7 @@ fn run_sw_vers() -> Option<String> {
 }
 
 fn run_win_ver() -> Option<String> {
-    std::process::Command::new("cmd")
+    crate::tools_install::new_subprocess("cmd")
         .args(["/C", "ver"])
         .output()
         .ok()
