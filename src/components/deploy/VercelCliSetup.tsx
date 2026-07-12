@@ -18,24 +18,34 @@ interface VercelCliSetupProps {
   onReadyChange?: (ready: boolean) => void;
 }
 
+const VERCEL_SCAN_TOOLS = ["vercel", "node", "npm"] as const;
+
 export function VercelCliSetup({ onReadyChange }: VercelCliSetupProps) {
-  const scanCommand = useTauriCommand<ToolStatus[]>();
-  const installCommand = useTauriCommand<CommandResult>();
+  const {
+    run: runScan,
+    loading: scanLoading,
+    data: scanData,
+  } = useTauriCommand<ToolStatus[]>();
+  const {
+    run: runInstall,
+    loading: installBusy,
+    error: installError,
+  } = useTauriCommand<CommandResult>();
   const [installLog, setInstallLog] = useState<string | null>(null);
-  const installBusy = installCommand.loading;
   const { progress, streamLog } = useInstallProgress(installBusy);
   const mergedLog = [streamLog, installLog].filter(Boolean).join("\n\n");
 
-  const vercelStatus = scanCommand.data?.find((t) => t.name === "vercel");
+  const vercelStatus = scanData?.find((t) => t.name === "vercel");
+  const nodeStatus = scanData?.find((t) => t.name === "node");
   const ready = Boolean(vercelStatus?.installed);
 
   const rescan = useCallback(async () => {
-    await scanCommand.run("scan_environment");
-  }, [scanCommand]);
+    await runScan("scan_tools", { tools: [...VERCEL_SCAN_TOOLS] });
+  }, [runScan]);
 
   useEffect(() => {
-    void rescan();
-  }, [rescan]);
+    void runScan("scan_tools", { tools: [...VERCEL_SCAN_TOOLS] });
+  }, [runScan]);
 
   useEffect(() => {
     onReadyChange?.(ready);
@@ -44,13 +54,13 @@ export function VercelCliSetup({ onReadyChange }: VercelCliSetupProps) {
   const install = useCallback(async () => {
     setInstallLog(null);
     try {
-      const result = await installCommand.run("install_tool", { tool: "vercel" });
+      const result = await runInstall("install_tool", { tool: "vercel" });
       if (result) setInstallLog(result.log);
       await rescan();
     } catch {
       // hook surfaces error
     }
-  }, [installCommand, rescan]);
+  }, [runInstall, rescan]);
 
   return (
     <Card className="border-border">
@@ -64,7 +74,7 @@ export function VercelCliSetup({ onReadyChange }: VercelCliSetupProps) {
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm">
-            {scanCommand.loading && !vercelStatus ? (
+            {scanLoading && !vercelStatus ? (
               <span className="text-muted-foreground">正在检测…</span>
             ) : ready ? (
               <span className="text-emerald-600 dark:text-emerald-400">
@@ -74,6 +84,7 @@ export function VercelCliSetup({ onReadyChange }: VercelCliSetupProps) {
             ) : (
               <span className="text-amber-600 dark:text-amber-400">
                 ⚠️ 未安装 — 请先安装再部署
+                {!nodeStatus?.installed && "（需先在「准备环境」安装 Node.js）"}
               </span>
             )}
           </p>
@@ -82,7 +93,7 @@ export function VercelCliSetup({ onReadyChange }: VercelCliSetupProps) {
               <Button
                 type="button"
                 size="sm"
-                disabled={installBusy || scanCommand.loading}
+                disabled={installBusy || scanLoading}
                 onClick={() => void install()}
               >
                 {installBusy ? (
@@ -97,7 +108,7 @@ export function VercelCliSetup({ onReadyChange }: VercelCliSetupProps) {
               type="button"
               size="sm"
               variant="outline"
-              disabled={installBusy || scanCommand.loading}
+              disabled={installBusy || scanLoading}
               onClick={() => void rescan()}
             >
               重新检测
@@ -105,11 +116,11 @@ export function VercelCliSetup({ onReadyChange }: VercelCliSetupProps) {
           </div>
         </div>
 
-        {(installBusy || mergedLog || installCommand.error) && (
+        {(installBusy || mergedLog || installError) && (
           <InstallProgressPanel
             loading={installBusy}
             progress={progress}
-            log={mergedLog || installCommand.error}
+            log={mergedLog || installError}
           />
         )}
 

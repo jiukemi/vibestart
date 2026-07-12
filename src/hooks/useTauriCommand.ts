@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 export function useTauriCommand<T>() {
   const [loading, setLoading] = useState(false);
@@ -31,5 +31,8 @@ export function useTauriCommand<T>() {
     setData(null);
   }, []);
 
-  return { run, loading, error, data, reset };
+  return useMemo(
+    () => ({ run, loading, error, data, reset }),
+    [run, loading, error, data, reset],
+  );
 }

@@ -57,7 +57,7 @@ fn windows_codex_app_path() -> Option<String> {
 $pkg = Get-AppxPackage -Name OpenAI.Codex -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($pkg -and $pkg.InstallLocation) { Write-Output $pkg.InstallLocation }
 "#;
-    Command::new("powershell")
+    crate::tools_install::new_subprocess("powershell")
         .args(["-NoProfile", "-Command", script])
         .output()
         .ok()
@@ -1212,7 +1212,7 @@ Set-Location -LiteralPath '{}'
 "#,
                 dir.replace('\'', "''")
             );
-            if Command::new("powershell")
+            if crate::tools_install::new_subprocess("powershell")
                 .args(["-NoProfile", "-Command", &script])
                 .status()
                 .map(|s| s.success())
@@ -1227,7 +1227,7 @@ Set-Location -LiteralPath '{}'
 Start-Process "shell:AppsFolder\OpenAI.Codex_2p2nqsd0c76g0!App"
 "#
         );
-        return Command::new("powershell")
+        return crate::tools_install::new_subprocess("powershell")
             .args(["-NoProfile", "-Command", &script])
             .spawn()
             .map(|_| ())

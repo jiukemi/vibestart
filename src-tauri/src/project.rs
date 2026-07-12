@@ -512,18 +512,8 @@ fn which_available(cmd: &str) -> bool {
 
 fn resolve_command_path(cmd: &str) -> Option<String> {
     crate::tools_install::resolve_command_in_prefix(cmd).or_else(|| {
-        Command::new(if cfg!(target_os = "windows") {
-            "where"
-        } else {
-            "which"
-        })
-        .arg(cmd)
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.lines().next().unwrap_or("").trim().to_string())
-        .filter(|s| !s.is_empty())
+        crate::tools_install::which_in_system_path(cmd)
+            .map(|p| p.to_string_lossy().into_owned())
     })
 }
 
@@ -708,7 +698,7 @@ pub fn vercel_login() -> Result<String, String> {
 
     #[cfg(target_os = "windows")]
     {
-        let _ = std::process::Command::new("cmd")
+        let _ = crate::tools_install::new_subprocess("cmd")
             .args(["/C", "start", "", "https://vercel.com/login"])
             .status();
     }

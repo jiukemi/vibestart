@@ -88,9 +88,11 @@ export function GithubBrowserPanel({
 export function GithubNetworkPanel() {
   const { run: runGetStatus, data: statusData } =
     useTauriCommand<NetworkStatus>();
-  const testCommand = useTauriCommand<GithubConnectivity>();
-  const applyCommand = useTauriCommand<string>();
-  const detectCommand = useTauriCommand<NetworkConfig>();
+  const { run: runTest, data: connectivityData, loading: testLoading } =
+    useTauriCommand<GithubConnectivity>();
+  const { run: runApply, loading: applyLoading, error: applyError } =
+    useTauriCommand<string>();
+  const { run: runDetect, loading: detectLoading } = useTauriCommand<NetworkConfig>();
 
   const [config, setConfig] = useState<NetworkConfig>({
     enabled: false,
@@ -110,24 +112,24 @@ export function GithubNetworkPanel() {
   }, [statusData]);
 
   const testConnection = useCallback(async () => {
-    await testCommand.run("test_github_connectivity");
-  }, [testCommand]);
+    await runTest("test_github_connectivity");
+  }, [runTest]);
 
   const useDetected = useCallback(async () => {
-    const detected = await detectCommand.run("use_detected_proxy");
+    const detected = await runDetect("use_detected_proxy");
     if (detected) {
       setConfig(detected);
     }
-  }, [detectCommand]);
+  }, [runDetect]);
 
   const applyNetwork = useCallback(async () => {
     setApplyLog(null);
-    const result = await applyCommand.run("apply_github_network", { config });
+    const result = await runApply("apply_github_network", { config });
     if (result) setApplyLog(result);
     await runGetStatus("get_network_status");
-  }, [applyCommand, config, runGetStatus]);
+  }, [runApply, config, runGetStatus]);
 
-  const connectivity = testCommand.data;
+  const connectivity = connectivityData;
   const detected = statusData?.detected_proxies ?? [];
 
   return (
@@ -165,16 +167,16 @@ export function GithubNetworkPanel() {
             type="button"
             variant="outline"
             size="sm"
-            disabled={testCommand.loading}
+            disabled={testLoading}
             onClick={() => void testConnection()}
           >
-            {testCommand.loading ? "检测中…" : "检测 GitHub 连接"}
+            {testLoading ? "检测中…" : "检测 GitHub 连接"}
           </Button>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            disabled={detectCommand.loading}
+            disabled={detectLoading}
             onClick={() => void useDetected()}
           >
             使用检测到的系统代理
@@ -260,14 +262,14 @@ export function GithubNetworkPanel() {
 
         <Button
           type="button"
-          disabled={applyCommand.loading}
+          disabled={applyLoading}
           onClick={() => void applyNetwork()}
         >
-          {applyCommand.loading ? "应用中…" : "应用网络配置"}
+          {applyLoading ? "应用中…" : "应用网络配置"}
         </Button>
 
-        {(applyLog || applyCommand.error) && (
-          <CommandOutput log={applyLog ?? applyCommand.error} />
+        {(applyLog || applyError) && (
+          <CommandOutput log={applyLog ?? applyError} />
         )}
 
         <p className="text-xs text-muted-foreground">

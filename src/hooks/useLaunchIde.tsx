@@ -11,26 +11,28 @@ interface PendingLaunch {
 }
 
 export function useLaunchIde() {
-  const stateCommand = useTauriCommand<IdeLaunchState>();
-  const launchCommand = useTauriCommand<void>();
+  const { run: runState, loading: stateLoading } =
+    useTauriCommand<IdeLaunchState>();
+  const { run: runLaunchCmd, loading: launchLoading, error: launchError } =
+    useTauriCommand<void>();
   const [pending, setPending] = useState<PendingLaunch | null>(null);
 
   const runLaunch = useCallback(
     async (ide: string, projectDir: string | null, mode: "new" | "focus") => {
-      await launchCommand.run("launch_ide", {
+      await runLaunchCmd("launch_ide", {
         ide,
         projectDir: projectDir?.trim() || null,
         mode,
       });
     },
-    [launchCommand],
+    [runLaunchCmd],
   );
 
   const launchIde = useCallback(
     async (ide: string, projectDir?: string | null) => {
       const dir = projectDir?.trim() || null;
       try {
-        const state = await stateCommand.run("get_ide_launch_state", { ide });
+        const state = await runState("get_ide_launch_state", { ide });
         if (state?.running) {
           setPending({ ide, projectDir: dir, state });
           return;
@@ -40,7 +42,7 @@ export function useLaunchIde() {
         // errors surfaced via launchCommand / stateCommand
       }
     },
-    [runLaunch, stateCommand],
+    [runLaunch, runState],
   );
 
   const confirmFocus = useCallback(async () => {
@@ -69,8 +71,8 @@ export function useLaunchIde() {
     <LaunchIdeDialog
       open={pending !== null}
       state={pending?.state ?? null}
-      loading={launchCommand.loading}
-      error={launchCommand.error}
+      loading={launchLoading}
+      error={launchError}
       onOpenChange={(open) => {
         if (!open) setPending(null);
       }}
@@ -81,8 +83,8 @@ export function useLaunchIde() {
 
   return {
     launchIde,
-    launching: stateCommand.loading || launchCommand.loading,
-    launchError: launchCommand.error,
+    launching: stateLoading || launchLoading,
+    launchError,
     dialog,
   };
 }

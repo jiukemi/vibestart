@@ -52,12 +52,13 @@ export function SetupEnvStep() {
   const { run: runOs, data: osInfo } = useTauriCommand<OsInfo>();
   const { run: runScan, loading: scanLoading, data: scanData } =
     useTauriCommand<ToolStatus[]>();
-  const installCommand = useTauriCommand<CommandResult>();
+  const { run: runInstall, loading: installLoading, error: installError } =
+    useTauriCommand<CommandResult>();
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [installLog, setInstallLog] = useState<string | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
   const [goalSwitchOpen, setGoalSwitchOpen] = useState(false);
-  const installBusy = installCommand.loading || batchRunning;
+  const installBusy = installLoading || batchRunning;
   const { progress, streamLog } = useInstallProgress(installBusy);
   const mergedInstallLog = [streamLog, installLog].filter(Boolean).join("\n\n");
 
@@ -108,14 +109,14 @@ export function SetupEnvStep() {
       setInstallLog(null);
       startLoading(`正在安装 ${toolId}…`);
       try {
-        const result = await installCommand.run("install_tool", { tool: toolId });
+        const result = await runInstall("install_tool", { tool: toolId });
         if (result) setInstallLog(result.log);
         await rescan();
       } finally {
         stopLoading();
       }
     },
-    [installCommand, rescan, startLoading, stopLoading],
+    [runInstall, rescan, startLoading, stopLoading],
   );
 
   const installAllMissing = useCallback(async () => {
@@ -128,7 +129,7 @@ export function SetupEnvStep() {
         setActiveTool(tool.id);
         startLoading(`正在安装 ${tool.label}…`);
         try {
-          const result = await installCommand.run("install_tool", { tool: tool.id });
+          const result = await runInstall("install_tool", { tool: tool.id });
           if (result) setInstallLog(result.log);
           await runScan("scan_environment");
         } catch (err) {
@@ -144,7 +145,7 @@ export function SetupEnvStep() {
       setBatchRunning(false);
       setActiveTool(null);
     }
-  }, [goalTools, installCommand, runScan, startLoading, stopLoading, toolMap]);
+  }, [goalTools, runInstall, runScan, startLoading, stopLoading, toolMap]);
 
   const missingRequired = goalTools.filter(
     (t) => t.required && !isToolReady(toolMap.get(t.id), t.manualOnly),
@@ -164,7 +165,7 @@ export function SetupEnvStep() {
       setInstallLog(null);
       startLoading(`正在安装 ${installToolId}…`);
       try {
-        const result = await installCommand.run("install_tool", {
+        const result = await runInstall("install_tool", {
           tool: installToolId,
         });
         if (result) setInstallLog(result.log);
@@ -174,7 +175,7 @@ export function SetupEnvStep() {
         setActiveTool(null);
       }
     },
-    [installCommand, rescan, startLoading, stopLoading],
+    [runInstall, rescan, startLoading, stopLoading],
   );
 
   return (
@@ -216,7 +217,7 @@ export function SetupEnvStep() {
           scanLoading={scanLoading}
           onInstall={installIde}
           installBusy={
-            installCommand.loading &&
+            installLoading &&
             activeTool !== null &&
             !goalTools.some((t) => t.id === activeTool)
           }
@@ -238,7 +239,7 @@ export function SetupEnvStep() {
           {missingAny.length > 0 && (
             <Button
               type="button"
-              disabled={installCommand.loading || batchRunning || scanLoading}
+              disabled={installLoading || batchRunning || scanLoading}
               onClick={() => void installAllMissing()}
             >
               <Zap className="size-4" />
@@ -252,7 +253,7 @@ export function SetupEnvStep() {
               const ready = isToolReady(status, tool.manualOnly);
               const installing =
                 activeTool === tool.id &&
-                (installCommand.loading || batchRunning);
+                (installLoading || batchRunning);
 
               return (
                 <div
@@ -290,7 +291,7 @@ export function SetupEnvStep() {
                       <Button
                         type="button"
                         size="sm"
-                        disabled={installCommand.loading || batchRunning}
+                        disabled={installLoading || batchRunning}
                         onClick={() => void installTool(tool.id)}
                       >
                         {installing ? (
@@ -311,16 +312,16 @@ export function SetupEnvStep() {
             })}
           </div>
 
-          {(installBusy || mergedInstallLog || installCommand.error) && (
+          {(installBusy || mergedInstallLog || installError) && (
             <InstallProgressPanel
               loading={installBusy}
               progress={progress}
-              log={mergedInstallLog || installCommand.error}
+              log={mergedInstallLog || installError}
             />
           )}
 
-          {installCommand.error && !installLog && !streamLog && (
-            <p className="text-sm text-destructive">{installCommand.error}</p>
+          {installError && !installLog && !streamLog && (
+            <p className="text-sm text-destructive">{installError}</p>
           )}
         </CardContent>
       </Card>

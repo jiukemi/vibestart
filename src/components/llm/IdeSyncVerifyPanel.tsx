@@ -45,13 +45,17 @@ export function IdeSyncVerifyPanel({
   const [items, setItems] = useState<IdeSyncVerifyItem[]>([]);
   const [verified, setVerified] = useState(false);
 
-  const verifyCommand = useTauriCommand<IdeSyncVerifyItem[]>();
+  const {
+    run: invokeVerify,
+    loading: verifyLoading,
+    error: verifyError,
+  } = useTauriCommand<IdeSyncVerifyItem[]>();
   const { platform } = useOsInfo();
   const { launchIde, launching, launchError, dialog } = useLaunchIde();
 
   const runVerify = useCallback(async () => {
     if (!apiKey.trim() || ides.length === 0) return;
-    const result = await verifyCommand.run("verify_ide_sync", {
+    const result = await invokeVerify("verify_ide_sync", {
       ides,
       provider,
       apiKey: apiKey.trim(),
@@ -60,7 +64,7 @@ export function IdeSyncVerifyPanel({
       setItems(result);
       setVerified(true);
     }
-  }, [apiKey, ides, provider, verifyCommand]);
+  }, [apiKey, ides, invokeVerify, provider]);
 
   useEffect(() => {
     if (autoVerify && apiKey.trim() && ides.length > 0) {
@@ -100,19 +104,19 @@ export function IdeSyncVerifyPanel({
             type="button"
             variant="outline"
             size="sm"
-            disabled={verifyCommand.loading || !apiKey.trim()}
+            disabled={verifyLoading || !apiKey.trim()}
             onClick={() => void runVerify()}
           >
-            {verifyCommand.loading ? (
+            {verifyLoading ? (
               <Loader2 className="size-3.5 animate-spin" />
             ) : (
               <ShieldCheck className="size-3.5" />
             )}
-            {verifyCommand.loading ? "验证中…" : verified ? "重新验证" : "验证同步结果"}
+            {verifyLoading ? "验证中…" : verified ? "重新验证" : "验证同步结果"}
           </Button>
 
-          {verifyCommand.error && (
-            <p className="text-xs text-destructive">{verifyCommand.error}</p>
+          {verifyError && (
+            <p className="text-xs text-destructive">{verifyError}</p>
           )}
           {launchError && (
             <p className="text-xs text-destructive">{launchError}</p>

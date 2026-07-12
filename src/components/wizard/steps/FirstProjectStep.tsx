@@ -39,7 +39,7 @@ export function FirstProjectStep() {
   const [dirStatus, setDirStatus] = useState<ProjectDirStatus | null>(null);
 
   const initCommand = useTauriCommand<InitProjectResult>();
-  const statusCommand = useTauriCommand<ProjectDirStatus>();
+  const { run: runStatus } = useTauriCommand<ProjectDirStatus>();
 
   useEffect(() => {
     setInitialized(false);
@@ -58,23 +58,21 @@ export function FirstProjectStep() {
       setInitError(null);
       setInitialized(false);
       if (deployOnly) {
-        void statusCommand
-          .run("project_dir_status", { dir })
+        void runStatus("project_dir_status", { dir })
           .then((result) => setDirStatus(result ?? null))
           .catch(() => setDirStatus(null));
       }
     },
-    [deployOnly, setSelection, statusCommand],
+    [deployOnly, runStatus, setSelection],
   );
 
   useEffect(() => {
     if (deployOnly && projectDir) {
-      void statusCommand
-        .run("project_dir_status", { dir: projectDir })
+      void runStatus("project_dir_status", { dir: projectDir })
         .then((result) => setDirStatus(result ?? null))
         .catch(() => setDirStatus(null));
     }
-  }, [deployOnly, projectDir, statusCommand]);
+  }, [deployOnly, projectDir, runStatus]);
 
   const handleSelectPack = useCallback(
     async (pack: PackMeta) => {

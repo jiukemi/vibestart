@@ -1,6 +1,27 @@
 use serde::Serialize;
 use std::path::Path;
 use std::process::Command;
+use std::sync::Mutex;
+
+static SCAN_IN_PROGRESS: Mutex<bool> = Mutex::new(false);
+
+fn with_scan_guard<T>(skipped: T, run: impl FnOnce() -> T) -> T {
+    let mut guard = SCAN_IN_PROGRESS.lock().unwrap_or_else(|e| e.into_inner());
+    if *guard {
+        return skipped;
+    }
+    *guard = true;
+    drop(guard);
+    let result = run();
+    if let Ok(mut guard) = SCAN_IN_PROGRESS.lock() {
+        *guard = false;
+    }
+    result
+}
+
+fn scan_tools_inner(names: &[&str]) -> Vec<ToolStatus> {
+    names.iter().map(|name| scan_one(name)).collect()
+}
 
 #[derive(Debug, Serialize, Clone)]
 pub struct ToolStatus {
@@ -12,28 +33,63 @@ pub struct ToolStatus {
 }
 
 pub fn scan_all() -> Vec<ToolStatus> {
-    vec![
-        scan_command("git", &["--version"], parse_prefix_version),
-        scan_command("node", &["--version"], |s| {
+    with_scan_guard(Vec::new(), || {
+        scan_tools_inner(&[
+        "git",
+        "node",
+        "npm",
+        "cursor",
+        "trae",
+        "windsurf",
+        "claude-code",
+        "codex",
+        "codex-bridge",
+        "cc-switch",
+        "tongyi-lingma",
+        "vercel",
+        "flutter",
+        "wechat-devtools",
+        "xcode",
+        "android-studio",
+    ])
+    })
+}
+
+/// 只扫描指定工具，避免部署页等为查一个 CLI 而跑全盘检测。
+pub fn scan_tools(names: &[&str]) -> Vec<ToolStatus> {
+    with_scan_guard(Vec::new(), || scan_tools_inner(names))
+}
+
+fn scan_one(name: &str) -> ToolStatus {
+    match name {
+        "git" => scan_command("git", &["--version"], parse_prefix_version),
+        "node" => scan_command("node", &["--version"], |s| {
             s.trim().trim_start_matches('v').to_string()
         }),
-        scan_npm(),
-        scan_cursor(),
-        scan_trae(),
-        scan_windsurf(),
-        scan_claude_code(),
-        scan_codex(),
-        scan_codex_bridge(),
-        scan_cc_switch(),
-        scan_tongyi_lingma(),
-        scan_command("vercel", &["--version"], |s| s.trim().to_string()),
-        scan_command("flutter", &["--version"], |s| {
+        "npm" => scan_npm(),
+        "cursor" => scan_cursor(),
+        "trae" => scan_trae(),
+        "windsurf" => scan_windsurf(),
+        "claude-code" => scan_claude_code(),
+        "codex" => scan_codex(),
+        "codex-bridge" => scan_codex_bridge(),
+        "cc-switch" => scan_cc_switch(),
+        "tongyi-lingma" => scan_tongyi_lingma(),
+        "vercel" => scan_command("vercel", &["--version"], |s| s.trim().to_string()),
+        "flutter" => scan_command("flutter", &["--version"], |s| {
             s.lines().next().unwrap_or(s).trim().to_string()
         }),
-        scan_wechat_devtools(),
-        scan_xcode(),
-        scan_android_studio(),
-    ]
+        "wechat-devtools" => scan_wechat_devtools(),
+        "xcode" => scan_xcode(),
+        "android-studio" => scan_android_studio(),
+        _ => ToolStatus {
+            name: name.to_string(),
+            installed: false,
+            version: None,
+            path: None,
+            meets_minimum: false,
+        },
+    }
 }
 
 fn scan_command(name: &str, args: &[&str], parse: fn(&str) -> String) -> ToolStatus {

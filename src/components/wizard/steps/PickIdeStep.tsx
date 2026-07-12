@@ -53,9 +53,10 @@ export function PickIdeStep() {
     loading: scanLoading,
     data: scanData,
   } = useTauriCommand<ToolStatus[]>();
-  const toolCommand = useTauriCommand<CommandResult>();
+  const { run: runTool, loading: toolLoading, error: toolError } =
+    useTauriCommand<CommandResult>();
   const [installLog, setInstallLog] = useState<string | null>(null);
-  const { progress, streamLog } = useInstallProgress(toolCommand.loading);
+  const { progress, streamLog } = useInstallProgress(toolLoading);
   const mergedInstallLog = [streamLog, installLog].filter(Boolean).join("\n\n");
   const [confirmUninstall, setConfirmUninstall] = useState(false);
   const [initialScanDone, setInitialScanDone] = useState(false);
@@ -101,14 +102,14 @@ export function PickIdeStep() {
       };
       startLoading(labels[command]);
       try {
-        const result = await toolCommand.run(command, { tool });
+        const result = await runTool(command, { tool });
         if (result) setInstallLog(result.log);
         await rescan();
       } finally {
         stopLoading();
       }
     },
-    [rescan, selectedOption, startLoading, stopLoading, toolCommand],
+    [rescan, runTool, selectedOption, startLoading, stopLoading],
   );
 
   const installSelectedIde = () => void runToolAction("install_tool");
@@ -121,7 +122,7 @@ export function PickIdeStep() {
   const canProceed = Boolean(
     selectedStatus?.installed && selectedStatus.meets_minimum,
   );
-  const isBusy = scanLoading || toolCommand.loading;
+  const isBusy = scanLoading || toolLoading;
   const showInitialLoading = !initialScanDone && !scanData;
   const isCodex = selected === "codex";
   const showIdeInstallCard = !canProceed && initialScanDone && !isCodex;
@@ -138,7 +139,7 @@ export function PickIdeStep() {
         <LoadingOverlay
           visible={isBusy && !showInitialLoading}
           message={
-            toolCommand.loading
+            toolLoading
               ? `正在处理 ${selectedOption.name}…`
               : "正在检测编辑器…"
           }
@@ -215,12 +216,12 @@ export function PickIdeStep() {
               onClick={installSelectedIde}
               disabled={isBusy}
             >
-              {toolCommand.loading ? (
+              {toolLoading ? (
                 <RefreshCw className="size-4 animate-spin" />
               ) : (
                 <Download className="size-4" />
               )}
-              {toolCommand.loading
+              {toolLoading
                 ? "处理中…"
                 : selectedOption.id === "tongyi-lingma"
                   ? "打开下载页"
@@ -265,11 +266,11 @@ export function PickIdeStep() {
         </Card>
       )}
 
-      {(toolCommand.loading || mergedInstallLog || toolCommand.error) && (
+      {(toolLoading || mergedInstallLog || toolError) && (
         <InstallProgressPanel
-          loading={toolCommand.loading}
+          loading={toolLoading}
           progress={progress}
-          log={mergedInstallLog || toolCommand.error}
+          log={mergedInstallLog || toolError}
         />
       )}
 

@@ -47,6 +47,16 @@ async fn scan_environment() -> Result<Vec<ToolStatus>, String> {
 }
 
 #[tauri::command]
+async fn scan_tools(tools: Vec<String>) -> Result<Vec<ToolStatus>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let names: Vec<&str> = tools.iter().map(String::as_str).collect();
+        env_scan::scan_tools(&names)
+    })
+    .await
+    .map_err(|e| format!("扫描失败: {e}"))
+}
+
+#[tauri::command]
 async fn install_tool(app: AppHandle, tool: String) -> Result<CommandResult, String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
         installer::install_tool(&tool, Some(&app))
@@ -423,6 +433,7 @@ pub fn run() {
             greet,
             get_os_info,
             scan_environment,
+            scan_tools,
             ensure_ssh_key,
             test_github_ssh,
             test_gitee_ssh,
