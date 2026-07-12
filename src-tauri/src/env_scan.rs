@@ -37,41 +37,28 @@ pub fn scan_all() -> Vec<ToolStatus> {
 }
 
 fn scan_command(name: &str, args: &[&str], parse: fn(&str) -> String) -> ToolStatus {
-    scan_command_path(name, args, parse, name)
-}
-
-fn scan_command_path(
-    name: &str,
-    args: &[&str],
-    parse: fn(&str) -> String,
-    program: &str,
-) -> ToolStatus {
-    match Command::new(program).args(args).output() {
-        Ok(out) if out.status.success() => {
+    if let Ok(out) = crate::tools_install::run_tool(name, args) {
+        if out.status.success() {
             let raw = String::from_utf8_lossy(&out.stdout).to_string();
             let version = parse(&raw);
             let meets = check_minimum(name, &version);
-            ToolStatus {
+            return ToolStatus {
                 name: name.to_string(),
                 installed: true,
                 version: Some(version),
-                path: Some(
-                    if program == name {
-                        which_path(name).unwrap_or_else(|| program.to_string())
-                    } else {
-                        program.to_string()
-                    },
-                ),
+                path: crate::tools_install::resolve_tool_executable(name)
+                    .map(|p| p.to_string_lossy().into_owned()),
                 meets_minimum: meets,
-            }
+            };
         }
-        _ => ToolStatus {
-            name: name.to_string(),
-            installed: false,
-            version: None,
-            path: None,
-            meets_minimum: false,
-        },
+    }
+
+    ToolStatus {
+        name: name.to_string(),
+        installed: false,
+        version: None,
+        path: None,
+        meets_minimum: false,
     }
 }
 
@@ -159,8 +146,8 @@ fn scan_cursor_windows() -> ToolStatus {
     let mut version: Option<String> = None;
     let mut path: Option<String> = None;
 
-    if let Some(cli) = which_windows_cli("cursor") {
-        if let Ok(out) = run_windows_cli_version(&cli) {
+    if let Some(cli) = crate::tools_install::which_windows_cli("cursor") {
+        if let Ok(out) = crate::tools_install::run_executable(&cli, &["--version"]) {
             if out.status.success() {
                 version = Some(String::from_utf8_lossy(&out.stdout).trim().to_string());
             }
@@ -184,42 +171,6 @@ fn scan_cursor_windows() -> ToolStatus {
         version,
         path,
         meets_minimum: installed,
-    }
-}
-
-/// Windows：`where` 可能先返回无扩展名脚本，需优先 `.cmd` / `.exe`
-#[cfg(target_os = "windows")]
-fn which_windows_cli(name: &str) -> Option<std::path::PathBuf> {
-    let output = Command::new("where").arg(name).output().ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut cmd_paths = Vec::new();
-    let mut exe_paths = Vec::new();
-    for line in stdout.lines() {
-        let p = std::path::PathBuf::from(line.trim());
-        if !p.is_file() {
-            continue;
-        }
-        match p.extension().and_then(|e| e.to_str()) {
-            Some("cmd") | Some("bat") => cmd_paths.push(p),
-            Some("exe") => exe_paths.push(p),
-            _ => {}
-        }
-    }
-    cmd_paths.into_iter().next().or_else(|| exe_paths.into_iter().next())
-}
-
-#[cfg(target_os = "windows")]
-fn run_windows_cli_version(cli: &std::path::Path) -> std::io::Result<std::process::Output> {
-    match cli.extension().and_then(|e| e.to_str()) {
-        Some("cmd") | Some("bat") => Command::new("cmd")
-            .arg("/C")
-            .arg(cli)
-            .arg("--version")
-            .output(),
-        _ => Command::new(cli).arg("--version").output(),
     }
 }
 
@@ -275,6 +226,23 @@ fn scan_tongyi_lingma() -> ToolStatus {
 }
 
 fn scan_gui_ide(name: &str, app_name: &str, cli: &str, mac_paths: &[&str]) -> ToolStatus {
+    #[cfg(target_os = "windows")]
+    if let Some(cli_path) = crate::tools_install::which_windows_cli(cli) {
+        if let Ok(out) = crate::tools_install::run_executable(&cli_path, &["--version"]) {
+            if out.status.success() {
+                let raw = String::from_utf8_lossy(&out.stdout).to_string();
+                return ToolStatus {
+                    name: name.to_string(),
+                    installed: true,
+                    version: Some(raw.lines().next().unwrap_or("").trim().to_string()),
+                    path: which_path(cli),
+                    meets_minimum: true,
+                };
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
     if let Ok(out) = Command::new(cli).arg("--version").output() {
         if out.status.success() {
             let raw = String::from_utf8_lossy(&out.stdout).to_string();
@@ -350,7 +318,7 @@ fn resolve_windows_gui_path(app_name: &str, folder_name: &str) -> Option<String>
     if let Some(p) = which_windows_exe(&format!("{app_name}.exe")) {
         return Some(p.to_string_lossy().into_owned());
     }
-    if let Some(cli) = which_windows_cli(folder_name) {
+    if let Some(cli) = crate::tools_install::which_windows_cli(folder_name) {
         if let Some(exe) = gui_exe_from_electron_cli(&cli, app_name) {
             return Some(exe.to_string_lossy().into_owned());
         }
@@ -467,7 +435,8 @@ fn scan_cc_switch() -> ToolStatus {
 
 fn scan_named_cli(name: &str, cmd: &str, args: &[&str]) -> ToolStatus {
     if let Some(path) = crate::tools_install::resolve_command_in_prefix(cmd) {
-        if let Ok(out) = Command::new(&path).args(args).output() {
+        let path = std::path::PathBuf::from(path);
+        if let Ok(out) = crate::tools_install::run_executable(&path, args) {
             if out.status.success() {
                 let raw = String::from_utf8_lossy(&out.stdout).to_string();
                 let version = raw.lines().next().unwrap_or("").trim().to_string();
@@ -479,14 +448,14 @@ fn scan_named_cli(name: &str, cmd: &str, args: &[&str]) -> ToolStatus {
                     } else {
                         Some(version)
                     },
-                    path: Some(path),
+                    path: Some(path.to_string_lossy().into_owned()),
                     meets_minimum: true,
                 };
             }
         }
     }
 
-    if let Ok(out) = Command::new(cmd).args(args).output() {
+    if let Ok(out) = crate::tools_install::run_tool(cmd, args) {
         if out.status.success() {
             let raw = String::from_utf8_lossy(&out.stdout).to_string();
             let version = raw.lines().next().unwrap_or("").trim().to_string();

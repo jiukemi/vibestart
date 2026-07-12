@@ -475,7 +475,7 @@ fn verify_npm_cli_install(
         return result;
     };
 
-    match Command::new(&path).arg("--version").output() {
+    match tools_install::run_executable(&path, &["--version"]) {
         Ok(out) if out.status.success() => {
             let version = String::from_utf8_lossy(&out.stdout).trim().to_string();
             result.log.push_str(&format!(

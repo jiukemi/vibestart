@@ -11,11 +11,26 @@
 #   ./scripts/release.sh patch --dry-run
 #   ./scripts/release.sh --current    # 首次发 v0.1.0：不 bump，只打 tag
 #   ./scripts/release.sh -y patch     # 跳过确认
+#   Windows PowerShell: .\scripts\release.ps1 patch
 #
 # 环境变量:
 #   ORIGIN_REMOTE=origin   默认 origin (Gitee)
 #   GITHUB_REMOTE=github   默认 github
 set -euo pipefail
+
+resolve_python() {
+  local cmd
+  for cmd in python3 python; do
+    if command -v "$cmd" >/dev/null 2>&1 && "$cmd" -c "pass" >/dev/null 2>&1; then
+      echo "$cmd"
+      return 0
+    fi
+  done
+  echo "错误: 需要 Python（python3 或 python）" >&2
+  exit 1
+}
+
+PYTHON="$(resolve_python)"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -67,7 +82,7 @@ for f in "$PKG_JSON" "$TAURI_CONF" "$CARGO_TOML" "$ROOT/site/js/config.js"; do
 done
 
 read_current_version() {
-  python3 - <<'PY'
+  "$PYTHON" - <<'PY'
 import json, re
 from pathlib import Path
 
@@ -80,7 +95,7 @@ PY
 compute_next_version() {
   local current="$1"
   local bump="$2"
-  python3 - <<PY
+  "$PYTHON" - <<PY
 import re, sys
 
 current = "$current"
@@ -113,7 +128,7 @@ PY
 
 write_versions() {
   local version="$1"
-  python3 - <<PY
+  "$PYTHON" - <<PY
 import json, re
 from pathlib import Path
 
@@ -124,6 +139,14 @@ pkg_path = root / "package.json"
 pkg = json.loads(pkg_path.read_text(encoding="utf-8"))
 pkg["version"] = version
 pkg_path.write_text(json.dumps(pkg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+lock_path = root / "package-lock.json"
+if lock_path.exists():
+    lock = json.loads(lock_path.read_text(encoding="utf-8"))
+    lock["version"] = version
+    if "" in lock.get("packages", {}):
+        lock["packages"][""]["version"] = version
+    lock_path.write_text(json.dumps(lock, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 tauri_path = root / "src-tauri" / "tauri.conf.json"
 tauri = json.loads(tauri_path.read_text(encoding="utf-8"))
@@ -236,7 +259,7 @@ echo "==> 写入版本号 ${NEXT}"
 if [[ "$NEXT" != "$CURRENT" ]]; then
   write_versions "$NEXT" >/dev/null
   echo "==> 提交"
-  git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml site/js/config.js
+  git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml site/js/config.js
   git commit -m "$(cat <<EOF
 chore: release ${TAG}
 

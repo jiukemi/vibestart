@@ -411,6 +411,7 @@ async fn localize_codex_app(app: AppHandle) -> Result<CommandResult, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    tools_install::init_process_env();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())

@@ -335,25 +335,200 @@ pub fn resolve_system_npm() -> Option<PathBuf> {
     }
 }
 
-/// 构造可执行的 npm 进程（Windows 上 .cmd 须经 cmd /C，否则 os error 193）
-pub fn new_npm_command(npm_path: &Path) -> Command {
+/// 安装版 GUI 进程启动时 PATH 可能仍是旧快照；从注册表刷新（User + Machine）。
+pub fn init_process_env() {
+    #[cfg(target_os = "windows")]
+    refresh_windows_path_from_registry();
+}
+
+#[cfg(target_os = "windows")]
+fn refresh_windows_path_from_registry() {
+    let machine = read_registry_path(
+        "HKLM",
+        r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+    );
+    let user = read_registry_path("HKCU", "Environment");
+    let mut parts = Vec::new();
+    if let Some(m) = machine.filter(|s| !s.is_empty()) {
+        parts.push(m);
+    }
+    if let Some(u) = user.filter(|s| !s.is_empty()) {
+        parts.push(u);
+    }
+    if parts.is_empty() {
+        return;
+    }
+    std::env::set_var("PATH", parts.join(";"));
+}
+
+#[cfg(target_os = "windows")]
+fn read_registry_path(hive: &str, subkey: &str) -> Option<String> {
+    let out = Command::new("reg")
+        .args(["query", &format!(r"{hive}\{subkey}"), "/v", "Path"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    parse_reg_path_value(&String::from_utf8_lossy(&out.stdout))
+}
+
+#[cfg(target_os = "windows")]
+fn parse_reg_path_value(text: &str) -> Option<String> {
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with("Path") {
+            continue;
+        }
+        let value = trimmed
+            .split("REG_EXPAND_SZ")
+            .nth(1)
+            .or_else(|| trimmed.split("REG_SZ").nth(1))
+            .map(str::trim)
+            .filter(|s| !s.is_empty())?;
+        return Some(expand_windows_env_str(value));
+    }
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn expand_windows_env_str(input: &str) -> String {
+    let mut result = input.to_string();
+    loop {
+        let Some(start) = result.find('%') else {
+            break;
+        };
+        let Some(rel_end) = result[start + 1..].find('%') else {
+            break;
+        };
+        let end = start + 1 + rel_end;
+        let var = &result[start + 1..end];
+        let replacement = std::env::var(var).unwrap_or_default();
+        result.replace_range(start..=end, &replacement);
+    }
+    result
+}
+
+/// Windows：`where` 可能先返回无扩展名脚本，需优先 `.cmd` / `.exe`
+#[cfg(target_os = "windows")]
+pub fn which_windows_cli(name: &str) -> Option<PathBuf> {
+    let output = Command::new("where").arg(name).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut cmd_paths = Vec::new();
+    let mut exe_paths = Vec::new();
+    for line in stdout.lines() {
+        let p = PathBuf::from(line.trim());
+        if !p.is_file() {
+            continue;
+        }
+        match p.extension().and_then(|e| e.to_str()) {
+            Some("cmd") | Some("bat") => cmd_paths.push(p),
+            Some("exe") => exe_paths.push(p),
+            _ => {}
+        }
+    }
+    cmd_paths.into_iter().next().or_else(|| exe_paths.into_iter().next())
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn which_windows_cli(_name: &str) -> Option<PathBuf> {
+    None
+}
+
+/// 构造子进程：Windows 上 `.cmd` / 无扩展名脚本必须经 `cmd /C`，否则会弹 0xc0000142。
+pub fn new_executable_command(path: &Path) -> Command {
     #[cfg(target_os = "windows")]
     {
-        match npm_path.extension().and_then(|e| e.to_str()) {
+        match path.extension().and_then(|e| e.to_str()) {
             Some("cmd") | Some("bat") => {
                 let mut cmd = Command::new("cmd");
-                cmd.arg("/C").arg(npm_path);
+                cmd.arg("/C").arg(path);
                 return cmd;
             }
             Some("exe") => {}
-            _ => {
+            None | Some(_) => {
                 let mut cmd = Command::new("cmd");
-                cmd.arg("/C").arg(npm_path);
+                cmd.arg("/C").arg(path);
                 return cmd;
             }
         }
     }
-    Command::new(npm_path)
+    Command::new(path)
+}
+
+pub fn run_executable(path: &Path, args: &[&str]) -> std::io::Result<std::process::Output> {
+    let mut cmd = new_executable_command(path);
+    cmd.args(args);
+    apply_tool_runtime_env(&mut cmd);
+    cmd.output()
+}
+
+pub fn resolve_system_git() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(git) = which_in_system_path("git") {
+            return Some(git);
+        }
+        let mut dirs = Vec::new();
+        if let Ok(pf) = std::env::var("ProgramFiles") {
+            dirs.push(PathBuf::from(pf).join("Git").join("cmd"));
+        }
+        dirs.push(PathBuf::from(r"C:\Program Files\Git\cmd"));
+        if std::env::consts::ARCH != "x86_64" {
+            if let Ok(pf86) = std::env::var("ProgramFiles(x86)") {
+                dirs.push(PathBuf::from(pf86).join("Git").join("cmd"));
+            }
+        }
+        for dir in dirs {
+            if let Some(p) = sibling_executable(&dir, &["git.exe"]) {
+                return Some(p);
+            }
+        }
+        return None;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    which_in_system_path("git")
+}
+
+pub fn resolve_tool_executable(name: &str) -> Option<PathBuf> {
+    match name {
+        "node" => resolve_system_node(),
+        "npm" => resolve_system_npm(),
+        "git" => resolve_system_git(),
+        other => resolve_command_in_prefix(other)
+            .map(PathBuf::from)
+            .or_else(|| resolve_cli_command(other))
+            .or_else(|| which_in_system_path(other)),
+    }
+}
+
+pub fn run_tool(name: &str, args: &[&str]) -> std::io::Result<std::process::Output> {
+    let path = resolve_tool_executable(name).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("未找到可执行文件: {name}"),
+        )
+    })?;
+    run_executable(&path, args)
+}
+
+pub fn apply_tool_runtime_env(cmd: &mut Command) {
+    apply_npm_runtime_env(cmd);
+    #[cfg(target_os = "windows")]
+    if let Some(git) = resolve_system_git().and_then(|g| g.parent().map(Path::to_path_buf)) {
+        prepend_path_env(cmd, &git);
+    }
+}
+
+/// 构造可执行的 npm 进程（Windows 上 .cmd 须经 cmd /C，否则 os error 193）
+pub fn new_npm_command(npm_path: &Path) -> Command {
+    let mut cmd = new_executable_command(npm_path);
+    apply_tool_runtime_env(&mut cmd);
+    cmd
 }
 
 pub fn npm_command_process() -> Result<Command, String> {
