@@ -21,5 +21,6 @@ pub fn deploy_gitee_pages(project_dir: &str, username: &str, repo: &str) -> Depl
         branch: "master",
         pages_url,
         success_footer,
+        host: "Gitee",
     })
 }

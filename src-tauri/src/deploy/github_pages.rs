@@ -12,5 +12,6 @@ pub fn deploy_github_pages(project_dir: &str, username: &str, repo: &str) -> Dep
         branch: "main",
         pages_url: pages_url.clone(),
         success_footer: String::new(),
+        host: "GitHub",
     })
 }

@@ -10,6 +10,8 @@ pub struct GitPagesDeployConfig<'a> {
     pub branch: &'a str,
     pub pages_url: String,
     pub success_footer: String,
+    /// 平台名称，用于新手向提示（如 "Gitee"）
+    pub host: &'a str,
 }
 
 enum GitStep<'a> {
@@ -29,10 +31,16 @@ pub fn deploy_git_pages(config: GitPagesDeployConfig<'_>) -> DeployResult {
         branch,
         pages_url,
         success_footer,
+        host,
     } = config;
 
     let identity_email = format!("{git_username}@users.noreply.vibestart.local");
     let mut log = String::new();
+    log.push_str("【VibeStart 自动部署】以下 Git 命令均由应用代为执行，你无需打开终端。\n\n");
+
+    if let Err(failed) = prepare_deploy(project_dir, git_username, &identity_email, &mut log) {
+        return failed;
+    }
 
     let steps = [
         GitStep::Init,
@@ -87,8 +95,8 @@ pub fn deploy_git_pages(config: GitPagesDeployConfig<'_>) -> DeployResult {
                     success: false,
                     url: None,
                     log: format!(
-                        "{log}\n部署在 `{label}` 步骤失败。\n\n{}",
-                        failure_hint(&step, &combined, git_username)
+                        "{log}\n❌ 部署在「{label}」步骤未成功。\n\n{}",
+                        failure_hint(&step, &combined, host)
                     ),
                 };
             }
@@ -96,7 +104,7 @@ pub fn deploy_git_pages(config: GitPagesDeployConfig<'_>) -> DeployResult {
                 return DeployResult {
                     success: false,
                     url: None,
-                    log: format!("{log}{label} 执行失败: {e}"),
+                    log: format!("{log}❌ {label} 执行失败: {e}"),
                 };
             }
         }
@@ -108,6 +116,84 @@ pub fn deploy_git_pages(config: GitPagesDeployConfig<'_>) -> DeployResult {
         url: Some(pages_url),
         log,
     }
+}
+
+fn prepare_deploy(
+    project_dir: &str,
+    git_username: &str,
+    identity_email: &str,
+    log: &mut String,
+) -> Result<(), DeployResult> {
+    if tools_install::resolve_system_git().is_none() {
+        return Err(DeployResult {
+            success: false,
+            url: None,
+                log: format!(
+                    "{log}❌ 未检测到 Git。\n\n\
+                     请返回「准备环境」步骤，点击「一键安装 Git」，安装完成后再来部署。"
+                ),
+        });
+    }
+    log.push_str("✓ 已检测到 Git\n");
+
+    match crate::ssh::ensure_key() {
+        Ok(info) if info.public_key.is_some() => {
+            log.push_str("✓ SSH 密钥已就绪（已由 VibeStart 自动生成）\n");
+        }
+        Ok(_) => {
+            return Err(DeployResult {
+                success: false,
+                url: None,
+                log: format!(
+                    "{log}❌ 无法读取 SSH 公钥。\n\n\
+                     请在本页点击「一键生成 SSH 密钥」，然后「复制 SSH 公钥」粘贴到 Gitee/GitHub 账户后再部署。"
+                ),
+            });
+        }
+        Err(e) => {
+            return Err(DeployResult {
+                success: false,
+                url: None,
+                log: format!(
+                    "{log}❌ 无法生成 SSH 密钥：{e}\n\n\
+                     请在本页点击「一键生成 SSH 密钥」后重试。"
+                ),
+            });
+        }
+    }
+
+    ensure_local_git_identity(project_dir, git_username, identity_email, log)?;
+    log.push('\n');
+    Ok(())
+}
+
+fn ensure_local_git_identity(
+    project_dir: &str,
+    name: &str,
+    email: &str,
+    log: &mut String,
+) -> Result<(), DeployResult> {
+    for (key, value) in [("user.name", name), ("user.email", email)] {
+        let out = run_git(project_dir, &["config", key, value]).map_err(|e| DeployResult {
+            success: false,
+            url: None,
+            log: format!("无法配置 Git 身份: {e}"),
+        })?;
+        if !out.status.success() {
+            let detail = format!(
+                "{}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            );
+            return Err(DeployResult {
+                success: false,
+                url: None,
+                log: format!("无法配置 Git 身份（{key}）: {detail}"),
+            });
+        }
+    }
+    log.push_str(&format!("✓ 已自动配置 Git 提交身份：{name} <{email}>\n"));
+    Ok(())
 }
 
 fn step_label(step: &GitStep<'_>, branch: &str, remote: &str) -> String {
@@ -213,38 +299,45 @@ fn try_remote_set_url(project_dir: &str, remote: &str, log: &mut String) -> bool
     }
 }
 
-fn failure_hint(step: &GitStep<'_>, combined: &str, git_username: &str) -> String {
-    if matches!(step, GitStep::Commit { .. })
-        && (combined.contains("Author identity unknown") || combined.contains("unable to auto-detect email"))
-    {
-        return format!(
-            "Git 未配置提交者身份（Windows 新装 Git 常见）。\n\
-             VibeStart 已尝试使用 {git_username} 作为作者；若仍失败，请在终端执行：\n\
-             git config --global user.name \"你的名字\"\n\
-             git config --global user.email \"你的邮箱\"\n\
-             然后重新点击「开始部署」。"
-        );
+fn failure_hint(step: &GitStep<'_>, combined: &str, host: &str) -> String {
+    if matches!(step, GitStep::Commit { .. }) {
+        return "提交代码时出错。请确认项目文件夹可写，然后再次点击「开始部署」。\n\
+             若问题仍在，请把下方日志发给 VibeStart 反馈。"
+            .into();
     }
 
     if matches!(step, GitStep::Push) {
         if combined.contains("Permission denied") || combined.contains("publickey") {
-            return "推送被拒绝：请先在向导「Git 托管」步骤配置 Gitee SSH 公钥，并在 Gitee 账户中添加。\n\
-                 也可在 Gitee 仓库页使用 HTTPS 方式推送（后续版本将支持）。"
-                .into();
+            return format!(
+                "无法推送到 {host}：SSH 公钥尚未生效。\n\n\
+                 请按顺序操作（均在 VibeStart 内完成，无需终端）：\n\
+                 1. 点击上方「一键生成 SSH 密钥」（若尚未生成）\n\
+                 2. 点击「复制 SSH 公钥」\n\
+                 3. 点击「打开 {host} 添加公钥」，在网页中粘贴并保存\n\
+                 4. 点击「测试连接」，显示成功后再点「开始部署」"
+            );
         }
         if combined.contains("Could not resolve hostname") || combined.contains("Connection timed out") {
-            return "无法连接 Gitee 服务器，请检查网络或代理后重试。".into();
+            return format!("无法连接 {host} 服务器，请检查网络后再次点击「开始部署」。");
         }
-        return "代码推送失败。请确认：\n\
-             1. Gitee 上已创建同名空仓库\n\
-             2. SSH 公钥已添加到 Gitee\n\
-             3. 仓库名与上方填写一致"
-            .into();
+        if combined.contains("Repository not found") || combined.contains("does not exist") {
+            return format!(
+                "找不到仓库。请确认：\n\
+                 1. 已在 {host} 网页新建空仓库（名称与上方填写一致）\n\
+                 2. 用户名与仓库名拼写正确\n\
+                 3. 修正后再次点击「开始部署」"
+            );
+        }
+        return format!(
+            "代码推送失败。请确认已在 {host} 创建同名空仓库，且 SSH 公钥已添加。\n\
+             可先点「测试连接」确认通过，再「开始部署」。"
+        );
     }
 
     if matches!(step, GitStep::RemoteAdd) {
-        return "无法设置 git remote。请检查项目目录是否可写，或手动删除项目内 .git 文件夹后重试。".into();
+        return "设置远程仓库地址失败。请再次点击「开始部署」；若仍失败，请确认项目目录未被其他程序占用。"
+            .into();
     }
 
-    "请查看上方 git 输出，修正后重新部署。".into()
+    "请查看下方日志。修正上方填写的用户名/仓库名后，再次点击「开始部署」。".into()
 }

@@ -7,6 +7,7 @@ import {
   type DeployTarget,
 } from "@/components/deploy/DeployCards";
 import { VercelCliSetup } from "@/components/deploy/VercelCliSetup";
+import { GitPagesSetup } from "@/components/deploy/GitPagesSetup";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -116,7 +117,10 @@ export function DeployStep() {
         setDeploySuccess(true);
         setSelection("deployUrl", result.url);
       } else if (!result.success) {
-        setLocalError("部署未成功，请查看下方日志或稍后重试。");
+        setLocalError(
+          result.log.split("\n\n").pop()?.replace(/\*\*/g, "") ??
+            "部署未成功，请查看下方日志。",
+        );
       }
     } catch {
       // error handled by hook
@@ -206,6 +210,13 @@ export function DeployStep() {
         {selected === "vercel" && !deploySkipped && (
           <VercelCliSetup onReadyChange={setVercelCliReady} />
         )}
+
+        {(selected === "gitee-pages" || selected === "github-pages") &&
+          !deploySkipped && (
+            <GitPagesSetup
+              provider={selected === "gitee-pages" ? "gitee" : "github"}
+            />
+          )}
 
         <DeployCards
           selected={selected}
