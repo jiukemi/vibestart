@@ -1,4 +1,5 @@
 mod gitee_pages;
+mod git_pages;
 mod github_pages;
 mod vercel;
 
