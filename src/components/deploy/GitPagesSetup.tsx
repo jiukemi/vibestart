@@ -14,14 +14,17 @@ import { useOpenInAppBrowser } from "@/hooks/useOpenInAppBrowser";
 import { useTauriCommand } from "@/hooks/useTauriCommand";
 import { interpretGitSshTest } from "@/lib/git-ssh-test";
 import type { SshKeyInfo } from "@/lib/tauri-types";
+import { cn } from "@/lib/utils";
 
 const GITHUB_SSH_URL = "https://github.com/settings/ssh/new";
 
 interface GitPagesSetupProps {
   provider: "gitee" | "github";
+  /** 嵌入部署卡片下方时使用，不再套外层 Card */
+  embedded?: boolean;
 }
 
-export function GitPagesSetup({ provider }: GitPagesSetupProps) {
+export function GitPagesSetup({ provider, embedded = false }: GitPagesSetupProps) {
   const host = provider === "gitee" ? "Gitee" : "GitHub";
   const {
     run: runEnsureKey,
@@ -86,105 +89,119 @@ export function GitPagesSetup({ provider }: GitPagesSetupProps) {
 
   const keyReady = Boolean(sshData?.public_key);
 
+  const body = (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        {keyLoading && !sshData ? (
+          <span className="text-muted-foreground">正在准备 SSH 密钥…</span>
+        ) : keyReady ? (
+          <span className="text-emerald-600 dark:text-emerald-400">
+            ✅ SSH 密钥已生成
+          </span>
+        ) : (
+          <span className="text-amber-600 dark:text-amber-400">
+            ⚠️ 尚未生成 SSH 密钥
+          </span>
+        )}
+        {sshInterpretation?.success && (
+          <span className="text-emerald-600 dark:text-emerald-400">
+            · {host} 连接正常
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={keyLoading}
+          onClick={() => void ensureKey()}
+        >
+          {keyLoading ? (
+            <RefreshCw className="size-4 animate-spin" />
+          ) : (
+            <KeyRound className="size-4" />
+          )}
+          {keyLoading ? "生成中…" : "一键生成 SSH 密钥"}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!keyReady}
+          onClick={() => void copyPublicKey()}
+        >
+          {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+          {copied ? "已复制" : "复制 SSH 公钥"}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={browserLoading || !keyReady}
+          onClick={openSshPage}
+        >
+          <ExternalLink className="size-4" />
+          打开 {host} 添加公钥
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          disabled={testLoading || !keyReady}
+          onClick={() => void testSsh()}
+        >
+          {testLoading ? (
+            <RefreshCw className="size-4 animate-spin" />
+          ) : null}
+          {testLoading ? "测试中…" : "测试连接"}
+        </Button>
+      </div>
+
+      {keyError && <p className="text-sm text-destructive">{keyError}</p>}
+
+      {sshInterpretation && !sshInterpretation.success && (
+        <p className="text-sm text-amber-600 dark:text-amber-400">
+          {sshInterpretation.summary}
+        </p>
+      )}
+
+      {testError && <p className="text-sm text-destructive">{testError}</p>}
+
+      <p className="text-xs text-muted-foreground">
+        VibeStart 会自动执行 git init / commit / push，无需打开终端。完成上方注册与仓库填写后，在此配置
+        SSH 即可部署。
+      </p>
+    </div>
+  );
+
+  if (embedded) {
+    return (
+      <div
+        className={cn(
+          "rounded-lg border border-border bg-muted/20 p-4 dark:bg-muted/10",
+        )}
+      >
+        <p className="mb-1 text-sm font-medium text-foreground">
+          第 3 步 · SSH 连接（一键配置）
+        </p>
+        <p className="mb-3 text-xs text-muted-foreground">
+          复制公钥到 {host} 账户，测试连接通过后即可部署。
+        </p>
+        {body}
+      </div>
+    );
+  }
+
   return (
     <Card className="border-border">
       <CardHeader className="pb-2">
         <CardTitle className="text-base">SSH 连接（一键配置）</CardTitle>
         <CardDescription>
-          部署到 {host} Pages 需要 SSH 推送。VibeStart 会自动生成密钥并代为执行所有 Git
-          命令，你只需把公钥粘贴到 {host} 网页一次。
+          部署到 {host} Pages 需要 SSH 推送。完成注册与仓库填写后再配置此项。
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          {keyLoading && !sshData ? (
-            <span className="text-muted-foreground">正在准备 SSH 密钥…</span>
-          ) : keyReady ? (
-            <span className="text-emerald-600 dark:text-emerald-400">
-              ✅ SSH 密钥已生成
-            </span>
-          ) : (
-            <span className="text-amber-600 dark:text-amber-400">
-              ⚠️ 尚未生成 SSH 密钥
-            </span>
-          )}
-          {sshInterpretation?.success && (
-            <span className="text-emerald-600 dark:text-emerald-400">
-              · {host} 连接正常
-            </span>
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={keyLoading}
-            onClick={() => void ensureKey()}
-          >
-            {keyLoading ? (
-              <RefreshCw className="size-4 animate-spin" />
-            ) : (
-              <KeyRound className="size-4" />
-            )}
-            {keyLoading ? "生成中…" : "一键生成 SSH 密钥"}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={!keyReady}
-            onClick={() => void copyPublicKey()}
-          >
-            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-            {copied ? "已复制" : "复制 SSH 公钥"}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={browserLoading || !keyReady}
-            onClick={openSshPage}
-          >
-            <ExternalLink className="size-4" />
-            打开 {host} 添加公钥
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            disabled={testLoading || !keyReady}
-            onClick={() => void testSsh()}
-          >
-            {testLoading ? (
-              <RefreshCw className="size-4 animate-spin" />
-            ) : null}
-            {testLoading ? "测试中…" : "测试连接"}
-          </Button>
-        </div>
-
-        {keyError && (
-          <p className="text-sm text-destructive">{keyError}</p>
-        )}
-
-        {sshInterpretation && !sshInterpretation.success && (
-          <p className="text-sm text-amber-600 dark:text-amber-400">
-            {sshInterpretation.summary}
-          </p>
-        )}
-
-        {testError && (
-          <p className="text-sm text-destructive">{testError}</p>
-        )}
-
-        <p className="text-xs text-muted-foreground">
-          首次部署：先在 {host} 注册并
-          {provider === "gitee" ? "完成实名认证，" : ""}
-          新建<strong className="font-medium text-foreground">空仓库</strong>
-          ，填写下方用户名与仓库名，再点「开始部署」。Git init / commit / push
-          均由应用自动完成。
-        </p>
-      </CardContent>
+      <CardContent>{body}</CardContent>
     </Card>
   );
 }

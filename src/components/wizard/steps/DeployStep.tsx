@@ -7,7 +7,6 @@ import {
   type DeployTarget,
 } from "@/components/deploy/DeployCards";
 import { VercelCliSetup } from "@/components/deploy/VercelCliSetup";
-import { GitPagesSetup } from "@/components/deploy/GitPagesSetup";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -210,13 +209,6 @@ export function DeployStep() {
         {selected === "vercel" && !deploySkipped && (
           <VercelCliSetup onReadyChange={setVercelCliReady} />
         )}
-
-        {(selected === "gitee-pages" || selected === "github-pages") &&
-          !deploySkipped && (
-            <GitPagesSetup
-              provider={selected === "gitee-pages" ? "gitee" : "github"}
-            />
-          )}
 
         <DeployCards
           selected={selected}

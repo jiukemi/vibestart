@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useOpenInAppBrowser } from "@/hooks/useOpenInAppBrowser";
+import { GitPagesSetup } from "@/components/deploy/GitPagesSetup";
 import {
   selectableCardClasses,
   selectableGridButtonClassName,
@@ -176,6 +177,12 @@ export function DeployCards({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
+                <ol className="list-inside list-decimal space-y-1 text-sm text-muted-foreground">
+                  <li>注册 GitHub 账号</li>
+                  <li>新建空仓库，填写下方用户名与仓库名</li>
+                  <li>在卡片下方完成 SSH 连接配置</li>
+                  <li>点击「开始部署」</li>
+                </ol>
                 <DeployRepoFields
                   username={githubUsername}
                   repo={githubRepoName}
@@ -213,53 +220,82 @@ export function DeployCards({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {deployOnlyMode && (
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={browserLoading}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void openBrowser(
-                          "open_external_browser",
-                          {
-                            url: "https://gitee.com/signup",
-                            title: "注册 Gitee",
-                          },
-                          "正在打开浏览器…",
-                          "external",
-                        ).then(() =>
-                          setBrowserHint(
-                            "已在浏览器打开 Gitee 注册页。注册后请新建仓库并填写下方用户名与仓库名。",
-                          ),
-                        );
-                      }}
-                    >
-                      <ExternalLink className="size-4" />
-                      注册 Gitee
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={browserLoading}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void openBrowser(
-                          "open_external_browser",
-                          {
-                            url: "https://gitee.com/projects/new",
-                            title: "新建 Gitee 仓库",
-                          },
-                          "正在打开浏览器…",
-                          "external",
-                        );
-                      }}
-                    >
-                      新建仓库
-                    </Button>
-                  </div>
+                <ol className="list-inside list-decimal space-y-1 text-sm text-muted-foreground">
+                  <li>注册 Gitee 并完成实名认证</li>
+                  <li>新建空仓库，填写下方用户名与仓库名</li>
+                  <li>在卡片下方完成 SSH 连接配置</li>
+                  <li>点击「开始部署」</li>
+                </ol>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={browserLoading}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void openBrowser(
+                        "open_external_browser",
+                        {
+                          url: "https://gitee.com/signup",
+                          title: "注册 Gitee",
+                        },
+                        "正在打开浏览器…",
+                        "external",
+                      ).then(() =>
+                        setBrowserHint(
+                          "已在浏览器打开 Gitee 注册页。注册并完成实名认证后，请新建仓库。",
+                        ),
+                      );
+                    }}
+                  >
+                    <ExternalLink className="size-4" />
+                    注册 Gitee
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={browserLoading}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void openBrowser(
+                        "open_external_browser",
+                        {
+                          url: "https://gitee.com/profile/account_information",
+                          title: "Gitee 实名认证",
+                        },
+                        "正在打开浏览器…",
+                        "external",
+                      );
+                    }}
+                  >
+                    实名认证
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={browserLoading}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void openBrowser(
+                        "open_external_browser",
+                        {
+                          url: "https://gitee.com/projects/new",
+                          title: "新建 Gitee 仓库",
+                        },
+                        "正在打开浏览器…",
+                        "external",
+                      );
+                    }}
+                  >
+                    新建仓库
+                  </Button>
+                </div>
+                {browserHint && selected === "gitee-pages" && (
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                    {browserHint}
+                  </p>
                 )}
                 <DeployRepoFields
                   username={giteeUsername}
@@ -277,6 +313,13 @@ export function DeployCards({
         )}
       </div>
 
+      {selected === "gitee-pages" && (
+        <GitPagesSetup provider="gitee" embedded />
+      )}
+      {selected === "github-pages" && (
+        <GitPagesSetup provider="github" embedded />
+      )}
+
       {gitProvider === "skip" && !deployOnlyMode && !expressMode && (
         <p className="text-sm text-muted-foreground">
           你跳过了 Git 托管步骤，仍可选用下方 Gitee / GitHub Pages（填写用户名与仓库名）或
@@ -286,8 +329,7 @@ export function DeployCards({
 
       {deployOnlyMode && (
         <p className="text-sm text-muted-foreground">
-          国内用户推荐 Gitee Pages；需能访问外网时可选 Vercel。部署前请确保已在 Gitee
-          创建同名空仓库并配置 SSH。
+          国内用户推荐 Gitee Pages；需能访问外网时可选 Vercel。按 Gitee 卡片内步骤依次完成即可。
         </p>
       )}
 
