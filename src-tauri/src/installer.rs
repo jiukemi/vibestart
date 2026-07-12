@@ -465,7 +465,7 @@ fn verify_npm_cli_install(
         return result;
     }
 
-    let Some(path) = tools_install::resolve_command_in_prefix(cli) else {
+    let Some(path) = tools_install::resolve_cli_command(cli) else {
         result.success = false;
         result.log.push_str(&format!(
             "\n\n安装未完成：未在 {} 找到 {cli} 可执行文件。\n\
@@ -479,14 +479,16 @@ fn verify_npm_cli_install(
         Ok(out) if out.status.success() => {
             let version = String::from_utf8_lossy(&out.stdout).trim().to_string();
             result.log.push_str(&format!(
-                "\n\n✓ {cli} 已就绪\n  路径: {path}\n  版本: {version}\n"
+                "\n\n✓ {cli} 已就绪\n  路径: {}\n  版本: {version}\n",
+                path.display()
             ));
         }
         Ok(out) => {
             let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
             result.success = false;
             result.log.push_str(&format!(
-                "\n\n已安装但无法运行 {cli}（{path}）: {err}\n"
+                "\n\n已安装但无法运行 {cli}（{}）: {err}\n",
+                path.display()
             ));
         }
         Err(e) => {
@@ -574,11 +576,25 @@ fn run_command_with_paths(
         Some(15),
     );
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    let mut cmd = Command::new(program);
+
+    let mut cmd = if program == "npm" {
+        match tools_install::resolve_system_npm() {
+            Some(p) => tools_install::new_npm_command(&p),
+            None => {
+                let hint = "未找到 npm。请先安装 Node.js（向导内一键安装或 winget install OpenJS.NodeJS.LTS），\
+                     安装完成后点击「重新检测」；若已安装仍报错，请重启 VibeStart 或查看右侧故障排查「npm 未找到」。";
+                return CommandResult {
+                    success: false,
+                    log: format!("{location_note}\n\n{hint}"),
+                };
+            }
+        }
+    } else {
+        Command::new(program)
+    };
     cmd.args(&arg_refs);
     if program == "npm" {
-        prepend_path(&mut cmd, &tools_install::npm_bin_dir(&paths.npm_prefix));
-        crate::mirrors::apply_npm_registry(&mut cmd);
+        tools_install::apply_npm_runtime_env(&mut cmd);
     }
 
     match cmd.output() {
@@ -599,10 +615,21 @@ fn run_command_with_paths(
                 log,
             }
         }
-        Err(error) => CommandResult {
-            success: false,
-            log: format!("{location_note}\n\n无法执行 {program}: {error}"),
-        },
+        Err(error) => {
+            let detail = if program == "npm" {
+                format!(
+                    "无法执行 npm: {error}\n\n\
+                     若提示「不是有效的 Win32 应用程序 (193)」，多为误选了无扩展名的 npm 脚本；\
+                     请重启 VibeStart 后重试，或见故障排查「npm 未找到」。"
+                )
+            } else {
+                format!("无法执行 {program}: {error}")
+            };
+            CommandResult {
+                success: false,
+                log: format!("{location_note}\n\n{detail}"),
+            }
+        }
     }
 }
 

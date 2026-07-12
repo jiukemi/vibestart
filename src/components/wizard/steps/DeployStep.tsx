@@ -6,6 +6,7 @@ import {
   DeployCards,
   type DeployTarget,
 } from "@/components/deploy/DeployCards";
+import { VercelCliSetup } from "@/components/deploy/VercelCliSetup";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -43,6 +44,7 @@ export function DeployStep() {
   const [deploySuccess, setDeploySuccess] = useState(false);
   const [deploySkipped, setDeploySkipped] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [vercelCliReady, setVercelCliReady] = useState(false);
 
   const validateCommand = useTauriCommand<void>();
   const deployCommand = useTauriCommand<DeployResult>();
@@ -141,6 +143,7 @@ export function DeployStep() {
 
   const canDeploy =
     Boolean(projectDir) &&
+    (selected !== "vercel" || vercelCliReady) &&
     (selected === "vercel" ||
       (selected === "gitee-pages" &&
         (giteeUsername ?? "").trim() &&
@@ -202,6 +205,10 @@ export function DeployStep() {
           </p>
         )}
 
+        {selected === "vercel" && !deploySkipped && (
+          <VercelCliSetup onReadyChange={setVercelCliReady} />
+        )}
+
         <DeployCards
           selected={selected}
           gitProvider={gitProvider}
@@ -245,6 +252,11 @@ export function DeployStep() {
             {projectDir && (
               <p className="text-xs text-muted-foreground">
                 项目：{projectDir}
+              </p>
+            )}
+            {selected === "vercel" && !vercelCliReady && projectDir && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                请先安装上方 Vercel CLI
               </p>
             )}
           </div>

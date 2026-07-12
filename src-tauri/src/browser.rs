@@ -1,3 +1,5 @@
+//! 内置浏览器壳（`vibestart-browser`）已停用：向导链接统一 `open_external`。
+//! 本模块保留外开逻辑与浏览器偏好（Chrome / 系统默认）。
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 use tauri::webview::NewWindowResponse;
@@ -101,6 +103,8 @@ fn prepare_open_url(app: &AppHandle, url: &str, title: &str, new_tab: bool) {
 /// OAuth / 强依赖系统浏览器 — 必须外开
 const EXTERNAL_REQUIRED: &[&str] = &[
     "vercel.com",
+    "authenticator.cursor.sh",
+    "cursor.sh",
     "accounts.google.com",
     "github.com/login",
     "github.com/signup",
@@ -211,6 +215,16 @@ fn focus_browser_shell(app: &AppHandle, title: &str) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(BROWSER_SHELL_LABEL) {
         let _ = window.set_title(title);
         let _ = window.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn browser_close_shell(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(BROWSER_SHELL_LABEL) {
+        window
+            .close()
+            .map_err(|e| format!("无法关闭内置浏览器: {e}"))?;
     }
     Ok(())
 }
@@ -387,6 +401,13 @@ pub fn open_in_app_with_options(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cursor_auth_must_external() {
+        assert!(must_open_externally(
+            "https://authenticator.cursor.sh/sign-up"
+        ));
+    }
 
     #[test]
     fn gitee_prefers_in_app() {

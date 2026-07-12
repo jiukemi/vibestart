@@ -1,4 +1,4 @@
-import { AppWindow, ExternalLink, KeyRound } from "lucide-react";
+import { ExternalLink, KeyRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +17,7 @@ interface LlmApiKeyGuidePanelProps {
 
 export function LlmApiKeyGuidePanel({ providerId }: LlmApiKeyGuidePanelProps) {
   const guide = getLlmApiGuide(providerId);
-  const { openGuide, open, loading, error } = useOpenInAppBrowser();
+  const { openGuide, loading, error } = useOpenInAppBrowser();
 
   return (
     <Card className="border-border bg-muted/20 dark:bg-muted/10">
@@ -27,7 +27,7 @@ export function LlmApiKeyGuidePanel({ providerId }: LlmApiKeyGuidePanelProps) {
           如何获取 API Key（图文步骤）
         </CardTitle>
         <CardDescription>
-          {guide.note} 优先在应用内打开，登录状态会保留，无需反复切换浏览器。
+          {guide.note} 点击下方按钮会在系统浏览器打开（可在设置中选择 Chrome 或默认浏览器）。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -55,8 +55,8 @@ export function LlmApiKeyGuidePanel({ providerId }: LlmApiKeyGuidePanelProps) {
               void openGuide(guide.signupUrl, `${guide.browserTitle} · 注册`)
             }
           >
-            <AppWindow className="size-4" />
-            应用内打开注册页
+            <ExternalLink className="size-4" />
+            浏览器打开注册页
           </Button>
           <Button
             type="button"
@@ -67,25 +67,8 @@ export function LlmApiKeyGuidePanel({ providerId }: LlmApiKeyGuidePanelProps) {
               void openGuide(guide.apiKeyUrl, `${guide.browserTitle} · API Key`)
             }
           >
-            <AppWindow className="size-4" />
-            应用内打开 API Keys
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={loading}
-            onClick={() =>
-              void open(
-                "open_external_browser",
-                { url: guide.apiKeyUrl },
-                "正在用系统浏览器打开…",
-                "external",
-              )
-            }
-          >
             <ExternalLink className="size-4" />
-            系统浏览器（页面异常时用）
+            浏览器打开 API Keys
           </Button>
         </div>
         {guide.keyPrefix && (

@@ -94,12 +94,13 @@ export function DeployCards({
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
               <ol className="list-inside list-decimal space-y-1">
+                <li>在下方安装 Vercel CLI（需 Node.js，准备环境步应已完成）</li>
                 <li>用邮箱在浏览器注册 Vercel（无需 GitHub）</li>
                 <li>注册后在下方登录，完成 CLI 授权（首次部署需要）</li>
               </ol>
               <p className="text-xs text-muted-foreground">
                 推荐在<strong className="font-medium text-foreground">系统浏览器（Chrome）</strong>
-                注册；内置窗口仅作备用，新窗口链接会自动转到外部浏览器。
+                注册并完成 CLI 登录。
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -125,30 +126,6 @@ export function DeployCards({
                 >
                   <ExternalLink className="size-4" />
                   浏览器打开注册
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={browserLoading}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void openBrowser(
-                      "open_builtin_browser",
-                      {
-                        url: "https://vercel.com/signup",
-                        title: "注册 Vercel · VibeStart",
-                      },
-                      "正在应用内打开…",
-                      "in_app",
-                    ).then(() =>
-                      setBrowserHint(
-                        "已在应用内打开。若页面空白或无法登录，请改用「浏览器打开」。",
-                      ),
-                    );
-                  }}
-                >
-                  应用内打开（备用）
                 </Button>
                 <Button
                   type="button"

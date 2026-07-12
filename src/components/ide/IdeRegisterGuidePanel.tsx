@@ -1,4 +1,4 @@
-import { AppWindow, ExternalLink, Info, Mail } from "lucide-react";
+import { ExternalLink, Info, Mail } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -31,7 +31,7 @@ export function IdeRegisterGuidePanel({
 }: IdeRegisterGuidePanelProps) {
   const option = getIdeOption(ideId);
   const guide = getIdeRegisterGuide(ideId);
-  const { openGuide, open, loading, error } = useOpenInAppBrowser();
+  const { open, loading, error } = useOpenInAppBrowser();
   const { reachable, checked, loading: netLoading } = useExternalReachability();
 
   const blockedReason = beforeLlmStep
@@ -106,17 +106,6 @@ export function IdeRegisterGuidePanel({
             type="button"
             disabled={loading || netLoading}
             onClick={() =>
-              void openGuide(guide.signupUrl, guide.browserTitle)
-            }
-          >
-            <AppWindow className="size-4" />
-            应用内打开注册页
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={loading || netLoading}
-            onClick={() =>
               void open(
                 "open_external_browser",
                 { url: guide.signupUrl },
@@ -126,7 +115,7 @@ export function IdeRegisterGuidePanel({
             }
           >
             <ExternalLink className="size-4" />
-            系统浏览器（OAuth 异常时用）
+            浏览器打开注册页
           </Button>
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}

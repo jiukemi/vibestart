@@ -17,7 +17,7 @@ pub fn scan_all() -> Vec<ToolStatus> {
         scan_command("node", &["--version"], |s| {
             s.trim().trim_start_matches('v').to_string()
         }),
-        scan_command("npm", &["--version"], |s| s.trim().to_string()),
+        scan_npm(),
         scan_cursor(),
         scan_trae(),
         scan_windsurf(),
@@ -37,7 +37,16 @@ pub fn scan_all() -> Vec<ToolStatus> {
 }
 
 fn scan_command(name: &str, args: &[&str], parse: fn(&str) -> String) -> ToolStatus {
-    match Command::new(name).args(args).output() {
+    scan_command_path(name, args, parse, name)
+}
+
+fn scan_command_path(
+    name: &str,
+    args: &[&str],
+    parse: fn(&str) -> String,
+    program: &str,
+) -> ToolStatus {
+    match Command::new(program).args(args).output() {
         Ok(out) if out.status.success() => {
             let raw = String::from_utf8_lossy(&out.stdout).to_string();
             let version = parse(&raw);
@@ -46,7 +55,13 @@ fn scan_command(name: &str, args: &[&str], parse: fn(&str) -> String) -> ToolSta
                 name: name.to_string(),
                 installed: true,
                 version: Some(version),
-                path: which_path(name),
+                path: Some(
+                    if program == name {
+                        which_path(name).unwrap_or_else(|| program.to_string())
+                    } else {
+                        program.to_string()
+                    },
+                ),
                 meets_minimum: meets,
             }
         }
@@ -58,6 +73,29 @@ fn scan_command(name: &str, args: &[&str], parse: fn(&str) -> String) -> ToolSta
             meets_minimum: false,
         },
     }
+}
+
+fn scan_npm() -> ToolStatus {
+    if let Some(npm) = crate::tools_install::resolve_system_npm() {
+        let path = npm.to_string_lossy().into_owned();
+        let mut cmd = crate::tools_install::new_npm_command(&npm);
+        cmd.arg("--version");
+        crate::tools_install::apply_npm_runtime_env(&mut cmd);
+        if let Ok(out) = cmd.output() {
+            if out.status.success() {
+                let raw = String::from_utf8_lossy(&out.stdout).to_string();
+                let version = raw.trim().to_string();
+                return ToolStatus {
+                    name: "npm".into(),
+                    installed: true,
+                    version: Some(version),
+                    path: Some(path),
+                    meets_minimum: true,
+                };
+            }
+        }
+    }
+    scan_command("npm", &["--version"], |s| s.trim().to_string())
 }
 
 fn parse_prefix_version(raw: &str) -> String {
@@ -75,61 +113,143 @@ fn check_minimum(name: &str, version: &str) -> bool {
         .collect();
     match name {
         "git" => parts.first().copied().unwrap_or(0) >= 2,
-        "node" => parts.first().copied().unwrap_or(0) >= 18,
+        "node" => true,
         _ => true,
     }
 }
 
 fn scan_cursor() -> ToolStatus {
-    if let Ok(out) = Command::new("cursor").arg("--version").output() {
-        if out.status.success() {
-            let raw = String::from_utf8_lossy(&out.stdout).to_string();
-            return ToolStatus {
-                name: "cursor".to_string(),
-                installed: true,
-                version: Some(raw.trim().to_string()),
-                path: which_path("cursor"),
-                meets_minimum: true,
-            };
+    #[cfg(target_os = "windows")]
+    return scan_cursor_windows();
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Ok(out) = Command::new("cursor").arg("--version").output() {
+            if out.status.success() {
+                let raw = String::from_utf8_lossy(&out.stdout).to_string();
+                return ToolStatus {
+                    name: "cursor".to_string(),
+                    installed: true,
+                    version: Some(raw.trim().to_string()),
+                    path: which_path("cursor"),
+                    meets_minimum: true,
+                };
+            }
+        }
+
+        let installed = Path::new("/Applications/Cursor.app").exists()
+            || find_gui_in_custom_roots("Cursor", "Cursor.app").is_some();
+
+        ToolStatus {
+            name: "cursor".to_string(),
+            installed,
+            version: None,
+            path: if installed {
+                which_path("cursor").or_else(|| Some("/Applications/Cursor.app".to_string()))
+            } else {
+                None
+            },
+            meets_minimum: installed,
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn scan_cursor_windows() -> ToolStatus {
+    let mut version: Option<String> = None;
+    let mut path: Option<String> = None;
+
+    if let Some(cli) = which_windows_cli("cursor") {
+        if let Ok(out) = run_windows_cli_version(&cli) {
+            if out.status.success() {
+                version = Some(String::from_utf8_lossy(&out.stdout).trim().to_string());
+            }
+        }
+        if path.is_none() {
+            path = gui_exe_from_electron_cli(&cli, "Cursor")
+                .map(|p| p.to_string_lossy().into_owned());
         }
     }
 
-    let installed = if cfg!(target_os = "macos") {
-        Path::new("/Applications/Cursor.app").exists()
-            || find_gui_in_custom_roots("Cursor", "Cursor.app").is_some()
-    } else if cfg!(target_os = "windows") {
-        std::env::var("LOCALAPPDATA")
-            .map(|local| {
-                Path::new(&local)
-                    .join("Programs")
-                    .join("cursor")
-                    .join("Cursor.exe")
-                    .exists()
-            })
-            .unwrap_or(false)
-            || resolve_windows_cursor_path().is_some()
-            || find_gui_in_custom_roots("Cursor", "Cursor.exe").is_some()
-    } else {
-        false
-    };
+    if path.is_none() {
+        path = resolve_windows_cursor_path()
+            .or_else(|| find_gui_in_custom_roots("Cursor", "Cursor.exe"));
+    }
+
+    let installed = path.is_some() || version.is_some();
 
     ToolStatus {
-        name: "cursor".to_string(),
+        name: "cursor".into(),
         installed,
-        version: None,
-        path: if installed {
-            which_path("cursor").or_else(resolve_windows_cursor_path).or_else(|| {
-                if cfg!(target_os = "macos") {
-                    Some("/Applications/Cursor.app".to_string())
-                } else {
-                    None
-                }
-            })
-        } else {
-            None
-        },
+        version,
+        path,
         meets_minimum: installed,
     }
+}
+
+/// Windows：`where` 可能先返回无扩展名脚本，需优先 `.cmd` / `.exe`
+#[cfg(target_os = "windows")]
+fn which_windows_cli(name: &str) -> Option<std::path::PathBuf> {
+    let output = Command::new("where").arg(name).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut cmd_paths = Vec::new();
+    let mut exe_paths = Vec::new();
+    for line in stdout.lines() {
+        let p = std::path::PathBuf::from(line.trim());
+        if !p.is_file() {
+            continue;
+        }
+        match p.extension().and_then(|e| e.to_str()) {
+            Some("cmd") | Some("bat") => cmd_paths.push(p),
+            Some("exe") => exe_paths.push(p),
+            _ => {}
+        }
+    }
+    cmd_paths.into_iter().next().or_else(|| exe_paths.into_iter().next())
+}
+
+#[cfg(target_os = "windows")]
+fn run_windows_cli_version(cli: &std::path::Path) -> std::io::Result<std::process::Output> {
+    match cli.extension().and_then(|e| e.to_str()) {
+        Some("cmd") | Some("bat") => Command::new("cmd")
+            .arg("/C")
+            .arg(cli)
+            .arg("--version")
+            .output(),
+        _ => Command::new(cli).arg("--version").output(),
+    }
+}
+
+/// Electron 系 IDE：`.../resources/app/bin/*.cmd` → 安装根目录下的 `Cursor.exe`
+#[cfg(target_os = "windows")]
+fn gui_exe_from_electron_cli(cli: &std::path::Path, app_name: &str) -> Option<std::path::PathBuf> {
+    let root = cli
+        .parent()? // bin
+        .parent()? // app
+        .parent()? // resources
+        .parent()?; // install root (e.g. D:\cursor)
+    let exe = root.join(format!("{app_name}.exe"));
+    if exe.is_file() {
+        return Some(exe);
+    }
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn which_windows_exe(name: &str) -> Option<std::path::PathBuf> {
+    let output = Command::new("where").arg(name).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(std::path::PathBuf::from)
+        .find(|p| p.is_file())
 }
 
 fn scan_trae() -> ToolStatus {
@@ -205,19 +325,37 @@ fn resolve_windows_cursor_path() -> Option<String> {
 #[cfg(target_os = "windows")]
 fn resolve_windows_gui_path(app_name: &str, folder_name: &str) -> Option<String> {
     use std::path::PathBuf;
-    let local = std::env::var("LOCALAPPDATA").ok()?;
-    let base = PathBuf::from(&local);
-    let folder = folder_name.to_lowercase();
-    let candidates = [
-        base.join("Programs").join(&folder).join(format!("{app_name}.exe")),
-        base.join("Programs").join(app_name).join(format!("{app_name}.exe")),
-        base.join(&folder).join(format!("{app_name}.exe")),
-        base.join(app_name).join(format!("{app_name}.exe")),
-    ];
-    candidates
-        .into_iter()
-        .find(|p| p.exists())
-        .map(|p| p.to_string_lossy().into_owned())
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        let base = PathBuf::from(&local);
+        let folder = folder_name.to_lowercase();
+        candidates.extend([
+            base.join("Programs").join(&folder).join(format!("{app_name}.exe")),
+            base.join("Programs").join(app_name).join(format!("{app_name}.exe")),
+            base.join(&folder).join(format!("{app_name}.exe")),
+            base.join(app_name).join(format!("{app_name}.exe")),
+        ]);
+    }
+    if let Ok(pf) = std::env::var("ProgramFiles") {
+        candidates.push(PathBuf::from(pf).join(app_name).join(format!("{app_name}.exe")));
+    }
+    if std::env::consts::ARCH != "x86_64" {
+        if let Ok(pf86) = std::env::var("ProgramFiles(x86)") {
+            candidates.push(PathBuf::from(pf86).join(app_name).join(format!("{app_name}.exe")));
+        }
+    }
+    if let Some(p) = candidates.into_iter().find(|p| p.exists()) {
+        return Some(p.to_string_lossy().into_owned());
+    }
+    if let Some(p) = which_windows_exe(&format!("{app_name}.exe")) {
+        return Some(p.to_string_lossy().into_owned());
+    }
+    if let Some(cli) = which_windows_cli(folder_name) {
+        if let Some(exe) = gui_exe_from_electron_cli(&cli, app_name) {
+            return Some(exe.to_string_lossy().into_owned());
+        }
+    }
+    None
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -464,18 +602,11 @@ fn scan_android_studio() -> ToolStatus {
 }
 
 fn which_path(cmd: &str) -> Option<String> {
-    crate::tools_install::resolve_command_in_prefix(cmd).or_else(|| {
-        Command::new(if cfg!(target_os = "windows") {
-            "where"
-        } else {
-            "which"
+    crate::tools_install::resolve_command_in_prefix(cmd)
+        .or_else(|| {
+            crate::tools_install::which_in_system_path(cmd)
+                .map(|p| p.to_string_lossy().into_owned())
         })
-        .arg(cmd)
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .and_then(|s| s.lines().next().map(|line| line.trim().to_string()))
-    })
 }
 
 fn find_gui_in_custom_roots(app_name: &str, file_name: &str) -> Option<String> {

@@ -59,6 +59,8 @@ interface WizardState {
     key: K,
     value: WizardSelections[K],
   ) => void;
+  /** 切换向导轨；完整轨且尚未确认方向时清空 buildGoal，避免沿用迁移默认 explore */
+  setWizardTrack: (track: WizardTrack) => void;
   enterHome: () => void;
   /** 进入工作台，不标记向导已完成（可随时从向导顶栏进入） */
   openHome: () => void;
@@ -166,6 +168,22 @@ export const useWizardStore = create<WizardState>()(
         }));
       },
 
+      setWizardTrack: (track) => {
+        set((state) => {
+          const chooseIdx = wizardStepIndex("choose-goal");
+          const goalNotLocked = !state.completedSteps.includes(chooseIdx);
+          return {
+            selections: mergeSelections({
+              ...state.selections,
+              wizardTrack: track,
+              ...(track === "full" && goalNotLocked
+                ? { buildGoal: null, appStack: null }
+                : {}),
+            }),
+          };
+        });
+      },
+
       enterHome: () => {
         const completeIndex = WIZARD_STEPS.length - 1;
         set((state) => ({
@@ -208,12 +226,9 @@ export const useWizardStore = create<WizardState>()(
           prev.buildGoal !== goal || prev.appStack !== appStack;
 
         const defaults = getGoalDefaults(goal, appStack);
+        // 小程序/App 强制完整轨；网页方向保留欢迎页已选的轨（完整轨可选 IDE/Git）
         const wizardTrack: WizardTrack =
-          goal === "miniprogram" || goal === "app"
-            ? "full"
-            : goal === "website" || goal === "explore"
-              ? "express"
-              : prev.wizardTrack;
+          goal === "miniprogram" || goal === "app" ? "full" : prev.wizardTrack;
 
         const chooseIdx = wizardStepIndex("choose-goal");
         const setupIdx = wizardStepIndex("setup-env");

@@ -86,15 +86,7 @@ export function getGoalTools(goal: BuildGoal | null, appStack: AppStack | null):
 
   switch (effective) {
     case "website":
-      return [
-        ...BASE_TOOLS,
-        {
-          id: "vercel",
-          label: "Vercel CLI",
-          description: "一键部署静态网站（推荐）",
-          required: false,
-        },
-      ];
+      return [...BASE_TOOLS];
     case "miniprogram":
       return [
         ...BASE_TOOLS,

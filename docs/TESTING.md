@@ -39,7 +39,7 @@
 - [ ] LLM 默认 DeepSeek；极速轨默认 Cursor（未选手动 IDE 步骤）
 - [ ] 首个项目：模板预览 + 折叠的「画原型 / 后端」可选块
 - [ ] Penpot / Excalidraw 链接可打开
-- [ ] 部署步仅 Vercel；可跳过部署
+- [ ] 部署步：选 Vercel 时可一键安装 Vercel CLI；可跳过整步部署
 - [ ] 完成后进入工作台
 
 ## 2. 完整轨

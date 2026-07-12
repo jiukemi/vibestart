@@ -29,7 +29,7 @@ export const IDE_REGISTER_GUIDES: Record<string, IdeRegisterGuide> = {
     note: "Trae 支持手机号或邮箱注册，国内可直接访问。",
     requiresExternalNetwork: false,
     steps: [
-      "点击应用内「打开 Trae 官网」",
+      "点击「浏览器打开 Trae 官网」",
       "下载并安装 Trae（若尚未安装）",
       "使用手机号或邮箱注册账号",
       "登录后导入 VS Code / Cursor 配置（可选）",
@@ -41,7 +41,7 @@ export const IDE_REGISTER_GUIDES: Record<string, IdeRegisterGuide> = {
     note: "可用 Google 或邮箱注册 Codeium / Windsurf 账号。",
     requiresExternalNetwork: true,
     steps: [
-      "点击应用内打开注册页",
+      "点击浏览器打开注册页",
       "选择 Google 或 Email 注册",
       "验证邮箱后下载 Windsurf 客户端",
       "登录即可使用 AI 编程功能",

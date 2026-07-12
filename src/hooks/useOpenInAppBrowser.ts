@@ -14,48 +14,20 @@ interface OpenBrowserArgs {
   title?: string;
 }
 
-/** auto = 后端按 URL 决定（默认应用内，OAuth 等外开） */
+/** @deprecated 内置浏览器已停用，保留类型兼容旧调用 */
 export type OpenBrowserMode = "in_app" | "external" | "auto";
 
+/** 向导内打开链接 — 统一走系统浏览器（WebView 在 Windows 上不稳定） */
 export function useOpenInAppBrowser() {
   const command = useTauriCommand<string | void>();
   const startLoading = useLoadingStore((s) => s.start);
   const stopLoading = useLoadingStore((s) => s.stop);
 
-  const open = useCallback(
-    async (
-      cmd: BrowserCommand,
-      args: OpenBrowserArgs,
-      loadingMessage = "正在打开页面…",
-      mode: OpenBrowserMode = "auto",
-    ) => {
+  const openExternal = useCallback(
+    async (url: string, loadingMessage = "正在用系统浏览器打开…") => {
       startLoading(loadingMessage);
       try {
-        if (mode === "external" || cmd === "open_external_browser") {
-          await command.run("open_external_browser", { url: args.url });
-          return "external" as const;
-        }
-
-        if (cmd === "open_builtin_browser") {
-          const result = await command.run("open_builtin_browser", {
-            url: args.url,
-            title: args.title ?? "VibeStart",
-            forceInApp: mode === "in_app" ? true : undefined,
-          });
-          return result === "external" ? ("external" as const) : ("in_app" as const);
-        }
-
-        if (cmd === "open_gitee_in_app") {
-          await command.run("open_gitee_in_app", { url: args.url });
-          return "in_app" as const;
-        }
-
-        if (cmd === "open_github_in_app") {
-          const result = await command.run("open_github_in_app", { url: args.url });
-          return result === "external" ? ("external" as const) : ("in_app" as const);
-        }
-
-        await command.run("open_external_browser", { url: args.url });
+        await command.run("open_external_browser", { url });
         return "external" as const;
       } finally {
         stopLoading();
@@ -64,16 +36,26 @@ export function useOpenInAppBrowser() {
     [command, startLoading, stopLoading],
   );
 
-  /** 向导步骤默认：应用内打开，登录态可保留 */
+  const open = useCallback(
+    async (
+      _cmd: BrowserCommand,
+      args: OpenBrowserArgs,
+      loadingMessage = "正在用系统浏览器打开…",
+      _mode?: OpenBrowserMode,
+    ) => openExternal(args.url, loadingMessage),
+    [openExternal],
+  );
+
   const openGuide = useCallback(
-    (url: string, title: string, mode: OpenBrowserMode = "auto") =>
-      open("open_builtin_browser", { url, title }, "正在打开…", mode),
-    [open],
+    (url: string, _title?: string, _mode?: OpenBrowserMode) =>
+      openExternal(url, "正在用系统浏览器打开…"),
+    [openExternal],
   );
 
   return {
     open,
     openGuide,
+    openExternal,
     loading: command.loading,
     error: command.error,
   };

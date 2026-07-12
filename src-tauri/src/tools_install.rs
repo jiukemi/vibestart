@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 
@@ -150,8 +151,11 @@ pub fn extra_path_prefixes() -> Vec<PathBuf> {
 }
 
 pub fn resolve_command_in_prefix(cmd: &str) -> Option<String> {
-    let paths = resolve_paths(&tools_install_config());
-    let bin = npm_bin_dir(&paths.npm_prefix);
+    resolve_command_in_dir(cmd, &npm_bin_dir(&resolve_paths(&tools_install_config()).npm_prefix))
+        .map(|p| p.to_string_lossy().into_owned())
+}
+
+fn resolve_command_in_dir(cmd: &str, bin: &Path) -> Option<PathBuf> {
     if !bin.is_dir() {
         return None;
     }
@@ -166,10 +170,240 @@ pub fn resolve_command_in_prefix(cmd: &str) -> Option<String> {
         vec![bin.join(cmd)]
     };
 
-    candidates
-        .into_iter()
-        .find(|p| p.is_file())
-        .map(|p| p.to_string_lossy().into_owned())
+    candidates.into_iter().find(|p| p.is_file())
+}
+
+/// 系统 PATH 中的可执行文件（where / which）
+pub fn which_in_system_path(cmd: &str) -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    if cmd == "npm" {
+        return which_npm_on_windows();
+    }
+
+    let probe = if cfg!(target_os = "windows") {
+        "where"
+    } else {
+        "which"
+    };
+    Command::new(probe)
+        .arg(cmd)
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|s| {
+            s.lines()
+                .find(|line| !line.trim().is_empty())
+                .map(|line| PathBuf::from(line.trim()))
+        })
+        .filter(|p| p.is_file())
+}
+
+/// Windows：`where npm` 首行常为无扩展名 Unix 脚本，直接 CreateProcess 会报 os error 193
+#[cfg(target_os = "windows")]
+fn which_npm_on_windows() -> Option<PathBuf> {
+    let output = Command::new("where").arg("npm").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut cmd_paths = Vec::new();
+    let mut exe_paths = Vec::new();
+    for line in stdout.lines() {
+        let p = PathBuf::from(line.trim());
+        if !p.is_file() {
+            continue;
+        }
+        match p.extension().and_then(|e| e.to_str()) {
+            Some("cmd") => cmd_paths.push(p),
+            Some("exe") => exe_paths.push(p),
+            _ => {}
+        }
+    }
+    cmd_paths.into_iter().next().or_else(|| exe_paths.into_iter().next())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn which_npm_on_windows() -> Option<PathBuf> {
+    None
+}
+
+const WINDOWS_NPM_NAMES: &[&str] = &["npm.cmd", "npm.exe"];
+
+#[cfg(target_os = "windows")]
+fn windows_node_install_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Ok(pf) = std::env::var("ProgramFiles") {
+        dirs.push(PathBuf::from(pf).join("nodejs"));
+    }
+    dirs.push(PathBuf::from(r"C:\Program Files\nodejs"));
+    // x86_64 主机优先 64 位 Node；仅非 x64 再查 Program Files (x86)
+    if std::env::consts::ARCH != "x86_64" {
+        if let Ok(pf86) = std::env::var("ProgramFiles(x86)") {
+            dirs.push(PathBuf::from(pf86).join("nodejs"));
+        }
+    }
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        dirs.push(PathBuf::from(local).join("Programs").join("nodejs"));
+    }
+    dirs
+}
+
+#[cfg(not(target_os = "windows"))]
+fn windows_node_install_dirs() -> Vec<PathBuf> {
+    vec![]
+}
+
+fn sibling_executable(dir: &Path, base_names: &[&str]) -> Option<PathBuf> {
+    for name in base_names {
+        let candidate = dir.join(name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+/// Node.js 可执行文件（winget 安装后当前进程 PATH 可能未刷新，需探测常见目录）
+pub fn resolve_system_node() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(node) = which_node_exe_on_windows() {
+            return Some(node);
+        }
+        for dir in windows_node_install_dirs() {
+            if let Some(p) = sibling_executable(&dir, &["node.exe"]) {
+                return Some(p);
+            }
+        }
+        return None;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        which_in_system_path("node").or_else(|| {
+            for dir in windows_node_install_dirs() {
+                if let Some(p) = sibling_executable(&dir, &["node.exe", "node"]) {
+                    return Some(p);
+                }
+            }
+            None
+        })
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn which_node_exe_on_windows() -> Option<PathBuf> {
+    let output = Command::new("where").arg("node").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let p = PathBuf::from(line.trim());
+        if p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("exe") {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// 系统 npm（随 Node 安装）
+pub fn resolve_system_npm() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        return which_npm_on_windows().or_else(|| {
+            resolve_system_node()
+                .and_then(|node| node.parent().map(Path::to_path_buf))
+                .and_then(|dir| sibling_executable(&dir, WINDOWS_NPM_NAMES))
+        }).or_else(|| {
+            for dir in windows_node_install_dirs() {
+                if let Some(p) = sibling_executable(&dir, WINDOWS_NPM_NAMES) {
+                    return Some(p);
+                }
+            }
+            None
+        });
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        which_in_system_path("npm").or_else(|| {
+            resolve_system_node()
+                .and_then(|node| node.parent().map(Path::to_path_buf))
+                .and_then(|dir| sibling_executable(&dir, &["npm", "npm.cmd"]))
+        })
+    }
+}
+
+/// 构造可执行的 npm 进程（Windows 上 .cmd 须经 cmd /C，否则 os error 193）
+pub fn new_npm_command(npm_path: &Path) -> Command {
+    #[cfg(target_os = "windows")]
+    {
+        match npm_path.extension().and_then(|e| e.to_str()) {
+            Some("cmd") | Some("bat") => {
+                let mut cmd = Command::new("cmd");
+                cmd.arg("/C").arg(npm_path);
+                return cmd;
+            }
+            Some("exe") => {}
+            _ => {
+                let mut cmd = Command::new("cmd");
+                cmd.arg("/C").arg(npm_path);
+                return cmd;
+            }
+        }
+    }
+    Command::new(npm_path)
+}
+
+pub fn npm_command_process() -> Result<Command, String> {
+    let path = resolve_system_npm().ok_or_else(|| {
+        "无法执行 npm: 未找到 npm。请先安装 Node.js，完成后点击「重新检测」或重启 VibeStart；\
+         详见故障排查「npm 未找到 / Vercel CLI 安装失败」。"
+            .to_string()
+    })?;
+    Ok(new_npm_command(&path))
+}
+
+/// Vercel / Claude 等：先查 VibeStart npm 前缀，再查系统 PATH
+pub fn resolve_cli_command(cmd: &str) -> Option<PathBuf> {
+    resolve_command_in_dir(cmd, &npm_bin_dir(&resolve_paths(&tools_install_config()).npm_prefix))
+        .or_else(|| which_in_system_path(cmd))
+}
+
+pub fn npm_command() -> Result<PathBuf, String> {
+    resolve_system_npm().ok_or_else(|| {
+        "无法执行 npm: 未找到 npm。请先安装 Node.js，完成后点击「重新检测」或重启 VibeStart；\
+         详见故障排查「npm 未找到 / Vercel CLI 安装失败」。"
+            .into()
+    })
+}
+
+/// 为 npm 子进程注入 Node 目录与 VibeStart npm bin（Windows / macOS 通用）
+pub fn apply_npm_runtime_env(cmd: &mut Command) {
+    if let Some(node) = resolve_system_node() {
+        if let Some(dir) = node.parent() {
+            prepend_path_env(cmd, dir);
+        }
+    }
+    let paths = resolve_paths(&tools_install_config());
+    prepend_path_env(cmd, &npm_bin_dir(&paths.npm_prefix));
+    crate::mirrors::apply_npm_registry(cmd);
+}
+
+fn prepend_path_env(cmd: &mut Command, extra: &Path) {
+    let extra = extra.to_string_lossy();
+    if cfg!(target_os = "windows") {
+        if let Ok(path) = std::env::var("PATH") {
+            cmd.env("PATH", format!("{extra};{path}"));
+        } else {
+            cmd.env("PATH", extra.as_ref());
+        }
+    } else if let Ok(path) = std::env::var("PATH") {
+        cmd.env("PATH", format!("{extra}:{path}"));
+    } else {
+        cmd.env("PATH", extra.as_ref());
+    }
 }
 
 pub fn gui_install_location(app_folder: &str) -> Option<PathBuf> {

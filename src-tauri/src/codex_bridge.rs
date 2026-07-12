@@ -394,9 +394,17 @@ fn try_git_clone_github(dir: &Path) -> String {
 }
 
 fn run_npm_in_dir(dir: &Path, args: &[&str]) -> CommandResult {
-    let mut cmd = Command::new("npm");
+    let mut cmd = match crate::tools_install::npm_command_process() {
+        Ok(c) => c,
+        Err(msg) => {
+            return CommandResult {
+                success: false,
+                log: msg,
+            };
+        }
+    };
     cmd.current_dir(dir).args(args);
-    mirrors::apply_npm_registry(&mut cmd);
+    crate::tools_install::apply_npm_runtime_env(&mut cmd);
     match cmd.output()
     {
         Ok(output) => CommandResult {
@@ -480,7 +488,15 @@ pub fn start_deepseek_bridge() -> CommandResult {
         };
     }
 
-    let mut cmd = Command::new("npm");
+    let mut cmd = match crate::tools_install::npm_command_process() {
+        Ok(c) => c,
+        Err(msg) => {
+            return CommandResult {
+                success: false,
+                log: msg,
+            };
+        }
+    };
     cmd.current_dir(&dir)
         .arg("start")
         .env("DEEPSEEK_API_KEY", api_key.trim())
@@ -489,7 +505,7 @@ pub fn start_deepseek_bridge() -> CommandResult {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    mirrors::apply_npm_registry(&mut cmd);
+    crate::tools_install::apply_npm_runtime_env(&mut cmd);
 
     #[cfg(unix)]
     {

@@ -34,6 +34,10 @@ export function ChooseGoalStep() {
   useEffect(() => {
     if (isGoalSelectionComplete(buildGoal, appStack)) {
       setConfirmed(true);
+      setEditing(false);
+    } else {
+      setConfirmed(false);
+      setEditing(true);
     }
   }, [buildGoal, appStack]);
 

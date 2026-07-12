@@ -1,0 +1,25 @@
+---
+description: Windows 相关改动优先隔离，尽量不回归 macOS 已跑通流程
+alwaysApply: true
+---
+
+# 改动原则：保 macOS 流、补 Windows
+
+VibeStart 在 macOS 上已基本跑通。**除规则/配置类文件外**，当前任务以 Windows 补齐为主时，默认**不要动 macOS 行为**。
+
+## 优先做法
+
+- **Rust**：Windows 逻辑放在 `#[cfg(target_os = "windows")]` / `cfg!(target_os = "windows")` 分支；macOS 保持原路径与命令（`brew`、`open`、Terminal `.command` 等）。
+- **前端/共享 TS**：能平台分支则用 `useOsInfo` / `platform-ui.ts`；避免改 macOS 默认文案、步骤顺序或 store 默认值。
+- **修 bug 时**：先加 Windows 专用探测/回退（如 npm 全路径解析），再考虑是否提升为跨平台共享；共享改动须确认 mac 仍与改前一致。
+- **文档/故障排查**：可新增 Windows 条目；勿删改 macOS 已验证步骤，除非两边事实已变。
+
+## 例外（可直接改）
+
+- `.cursor/rules/`、项目级配置与约定文档
+- 明确双平台都要对齐的 bug（须说明 mac 验证点）
+- 用户明确要求改 mac 或改共享默认行为
+
+## 拿不准时
+
+- 会动到**共享函数默认逻辑**、**向导轨/步骤可见性**、**安装器 mac 分支**时，先与用户确认，勿静默改 mac 流。

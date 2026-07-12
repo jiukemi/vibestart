@@ -250,7 +250,7 @@ export function GitHostingStep() {
             <CardHeader>
               <CardTitle>注册 {hostLabel} 账号</CardTitle>
               <CardDescription>
-                点击上方「应用内打开」完成注册
+                点击上方按钮在浏览器中完成注册
                 {gitProvider === "gitee" ? "并完成实名认证" : ""}，无需切换浏览器。
               </CardDescription>
             </CardHeader>
@@ -339,7 +339,7 @@ export function GitHostingStep() {
           <CardHeader>
             <CardTitle>配置 SSH 密钥</CardTitle>
             <CardDescription>
-              生成密钥后，在应用内打开「SSH 公钥」页面粘贴公钥。
+              生成密钥后，在浏览器打开「SSH 公钥」页面粘贴公钥。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

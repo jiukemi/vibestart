@@ -275,35 +275,23 @@ async fn download_app_update(app: AppHandle) -> DownloadUpdateResult {
 fn open_builtin_browser(
     app: AppHandle,
     url: String,
-    title: String,
-    force_in_app: Option<bool>,
+    _title: String,
+    _force_in_app: Option<bool>,
 ) -> Result<String, String> {
-    let prefer_in_app = force_in_app.unwrap_or_else(|| browser::should_prefer_in_app(&url));
-    if !prefer_in_app {
-        browser::open_external(&app, &url)?;
-        return Ok("external".into());
-    }
-
-    let label = browser::stable_browser_label(&url);
-    browser::open_in_app_with_options(&app, &url, &title, label, true)?;
-    Ok("in_app".into())
+    browser::open_external(&app, &url)?;
+    Ok("external".into())
 }
 
 #[tauri::command]
 fn open_github_in_app(app: AppHandle, url: String) -> Result<String, String> {
-    Ok(browser::open_for_wizard(&app, &url, "GitHub")?.into())
+    browser::open_external(&app, &url)?;
+    Ok("external".into())
 }
 
 #[tauri::command]
 fn open_gitee_in_app(app: AppHandle, url: String) -> Result<String, String> {
-    browser::open_in_app_with_options(
-        &app,
-        &url,
-        "Gitee",
-        browser::BROWSER_SHELL_LABEL,
-        true,
-    )?;
-    Ok("in_app".into())
+    browser::open_external(&app, &url)?;
+    Ok("external".into())
 }
 
 #[tauri::command]
@@ -487,6 +475,7 @@ pub fn run() {
             localize_codex_app,
             browser::browser_tabs_get,
             browser::browser_tabs_save,
+            browser::browser_close_shell,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

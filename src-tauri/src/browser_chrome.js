@@ -103,6 +103,12 @@
   btnNewTab.title = "新标签页";
   btnNewTab.textContent = "+";
 
+  var btnCloseWindow = document.createElement("button");
+  btnCloseWindow.className = "vs-btn";
+  btnCloseWindow.type = "button";
+  btnCloseWindow.title = "关闭窗口 (Esc)";
+  btnCloseWindow.textContent = "×";
+
   var urlBar = document.createElement("div");
   urlBar.className = "vs-url";
 
@@ -111,6 +117,7 @@
   navRow.appendChild(btnReload);
   navRow.appendChild(urlBar);
   navRow.appendChild(btnNewTab);
+  navRow.appendChild(btnCloseWindow);
 
   root.appendChild(tabsRow);
   root.appendChild(navRow);
@@ -157,7 +164,7 @@
       });
 
       el.appendChild(label);
-      if (state.tabs.length > 1) el.appendChild(close);
+      el.appendChild(close);
       el.addEventListener("click", function () {
         switchTab(tab.id);
       });
@@ -211,8 +218,21 @@
     });
   }
 
+  function closeWindow() {
+    invoke("browser_close_shell")
+      .catch(function () {
+        if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.window) {
+          return window.__TAURI_INTERNALS__.window.close();
+        }
+      })
+      .catch(function () {});
+  }
+
   function closeTab(id) {
-    if (state.tabs.length <= 1) return;
+    if (state.tabs.length <= 1) {
+      closeWindow();
+      return;
+    }
     var idx = -1;
     for (var i = 0; i < state.tabs.length; i++) {
       if (state.tabs[i].id === id) idx = i;
@@ -286,6 +306,10 @@
     openTab(base, "新标签页");
   });
 
+  btnCloseWindow.addEventListener("click", function () {
+    closeWindow();
+  });
+
   window.addEventListener("popstate", function () {
     saveActiveTabFromPage();
     renderTabs();
@@ -315,6 +339,10 @@
     if (mod && e.key === "w") {
       e.preventDefault();
       closeTab(state.activeId);
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeWindow();
     }
     if (e.altKey && e.key === "ArrowLeft") {
       e.preventDefault();

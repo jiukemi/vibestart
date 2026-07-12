@@ -249,9 +249,15 @@ fn npm_uninstall_codex(
     args.push("@openai/codex");
 
     install_progress::emit(app, "run", "正在卸载 npm 旧版 @openai/codex…", Some(20));
-    let mut cmd = Command::new("npm");
+    let mut cmd = match crate::tools_install::npm_command_process() {
+        Ok(c) => c,
+        Err(msg) => {
+            log.push_str(&format!("{msg}\n"));
+            return false;
+        }
+    };
     cmd.args(&args);
-    mirrors::apply_npm_registry(&mut cmd);
+    crate::tools_install::apply_npm_runtime_env(&mut cmd);
     log.push_str(&format!("$ npm {}\n", args.join(" ")));
     match cmd.output() {
         Ok(output) => {
@@ -933,7 +939,7 @@ fn install_macos(app: Option<&AppHandle>, log: &mut String) -> CommandResult {
     log.push_str("\n3/3 打开官方下载页（需可访问外网或使用代理）…\n");
     let opened = open_url(DOWNLOAD_MACOS);
     let network_note = "若 Homebrew / 镜像均失败，多为网络限制。可：\n\
-         · 在 VibeStart 内置浏览器打开下载页完成安装\n\
+         · 用系统浏览器打开下载页完成安装\n\
          · 配置代理后重试一键安装\n\
          · 联系管理员上传 Codex.dmg 到 Gitee 镜像（见 docs/MIRRORS.md）";
     CommandResult {

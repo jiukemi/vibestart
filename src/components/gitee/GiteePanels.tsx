@@ -70,7 +70,7 @@ export function GiteeBrowserPanel({ stage }: GiteeBrowserPanelProps) {
       <CardHeader>
         <CardTitle className="text-base">Gitee 操作</CardTitle>
         <CardDescription>
-          {STAGE_HINT[stage]} 应用内打开，登录态会保留。
+          {STAGE_HINT[stage]} 点击按钮会在系统浏览器打开。
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-2">

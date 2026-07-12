@@ -38,7 +38,7 @@ const PRESETS: {
 
 interface BrowserPresetPickerProps {
   className?: string;
-  /** 向导内嵌：默认折叠，避免与「应用内打开」面板抢注意力 */
+  /** 向导内嵌：默认折叠 */
   compact?: boolean;
   defaultCollapsed?: boolean;
 }
@@ -102,13 +102,9 @@ export function BrowserPresetPicker({
   const body = (
     <div className="space-y-3">
       <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground dark:bg-muted/10">
-        <p className="mt-1">
-          <strong className="font-medium text-foreground">应用内浏览器</strong>
-          ：Gitee、API Key 等 — 支持标签页、前进后退，登录态保留。
-        </p>
-        <p className="mt-1">
-          <strong className="font-medium text-foreground">系统外开</strong>
-          ：仅 GitHub OAuth、Vercel 登录等受限页面 — 使用下方选择。
+        <p>
+          向导中的链接（Gitee、DeepSeek、Cursor 注册等）均用<strong className="font-medium text-foreground">系统浏览器</strong>
+          打开。在此选择 Chrome 或系统默认浏览器。
         </p>
       </div>
 
@@ -180,9 +176,9 @@ export function BrowserPresetPicker({
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <CardTitle className="text-base">外开浏览器偏好</CardTitle>
+            <CardTitle className="text-base">系统浏览器偏好</CardTitle>
             <CardDescription>
-              不影响 Gitee / API Key 等应用内页面；仅当必须跳转系统浏览器时生效。
+              向导内链接均用系统浏览器打开；在此选择 Chrome 或系统默认。
             </CardDescription>
           </div>
           {compact && (

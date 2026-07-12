@@ -14,7 +14,7 @@
     var bar = document.createElement("div");
     bar.id = "vibestart-oauth-hint";
     bar.innerHTML =
-      "<strong>应用内预览</strong> · 若页面空白或无法登录，请关闭此窗口，在 VibeStart 中改用「系统浏览器打开」。";
+      "<strong>应用内预览</strong> · 若页面空白或无法登录，请点工具栏 <strong>×</strong> 或按 Esc 关闭，在 VibeStart 中改用「系统浏览器打开」。";
     (document.documentElement || document.body).appendChild(bar);
   }
 

@@ -65,7 +65,7 @@ pub fn deploy_gitee_pages(project_dir: &str, username: &str, repo: &str) -> Depl
     log.push_str(&format!(
         "\n✅ 代码已推送到 Gitee。\n\n\
          【下一步 — 开启 Gitee Pages】\n\
-         1. 在应用内打开：仓库 → 服务 → Gitee Pages\n\
+         1. 在浏览器打开：仓库 → 服务 → Gitee Pages\n\
          2. 分支选择 master，目录选 /\n\
          3. 点击「启动」\n\
          4. 免费版更新后需手动点「更新」\n\n\

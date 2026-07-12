@@ -14,6 +14,7 @@ import type { OsInfo } from "@/lib/tauri-types";
 import { expressStepCount } from "@/lib/wizard-flow";
 import { applyDeployOnlyDefaults, isDeployOnlyIntent } from "@/lib/wizard-intent";
 import { getStepMeta } from "@/lib/wizard-index";
+import { WIZARD_STEPS } from "@/lib/steps";
 import { selectableCardClasses } from "@/lib/selectable-card";
 import { useWizardStore, type UserIntent, type WizardTrack } from "@/stores/wizardStore";
 import { cn } from "@/lib/utils";
@@ -90,6 +91,7 @@ export function WelcomeStep() {
   const wizardTrack = useWizardStore((s) => s.selections.wizardTrack);
   const buildGoal = useWizardStore((s) => s.selections.buildGoal);
   const setSelection = useWizardStore((s) => s.setSelection);
+  const setWizardTrack = useWizardStore((s) => s.setWizardTrack);
   const { run, loading, error, data } = useTauriCommand<OsInfo>();
 
   useEffect(() => {
@@ -170,7 +172,7 @@ export function WelcomeStep() {
                 <button
                   key={track.id}
                   type="button"
-                  onClick={() => setSelection("wizardTrack", track.id)}
+                  onClick={() => setWizardTrack(track.id)}
                   className="text-left"
                 >
                   <Card
@@ -201,6 +203,11 @@ export function WelcomeStep() {
           {wizardTrack === "express" && (
             <p className="mt-2 text-xs text-muted-foreground">
               极速轨当前约 {visibleSteps} 步；IDE / Git 可在完成后从工作台补开。
+            </p>
+          )}
+          {wizardTrack === "full" && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              完整轨含 IDE 与 Git 等 {WIZARD_STEPS.length} 步；下一步请自选开发方向（网页 / 小程序 / App）。
             </p>
           )}
         </div>

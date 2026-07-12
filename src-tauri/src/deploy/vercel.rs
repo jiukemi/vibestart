@@ -1,12 +1,18 @@
 use super::DeployResult;
+use crate::tools_install;
 use std::process::Command;
 
 pub fn deploy_vercel(project_dir: &str) -> DeployResult {
-    let _ = Command::new("npm")
-        .args(["i", "-g", "vercel"])
-        .output();
+    if let Ok(mut npm) = tools_install::npm_command_process() {
+        tools_install::apply_npm_runtime_env(&mut npm);
+        let _ = npm.args(["install", "-g", "vercel"]).output();
+    }
 
-    let out = Command::new("vercel")
+    let vercel = tools_install::resolve_cli_command("vercel")
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "vercel".into());
+
+    let out = Command::new(&vercel)
         .args(["--yes", "--prod"])
         .current_dir(project_dir)
         .output();
