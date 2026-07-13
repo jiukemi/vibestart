@@ -143,6 +143,21 @@
     return "mac-arm";
   }
 
+  async function probeGitee() {
+    const start = performance.now();
+    try {
+      const { owner, repo } = cfg.gitee;
+      const res = await fetch(
+        `https://gitee.com/api/v5/repos/${owner}/${repo}`,
+        { cache: "no-store", signal: AbortSignal.timeout(4500) },
+      );
+      if (!res.ok) return { ok: false, ms: 0 };
+      return { ok: true, ms: Math.round(performance.now() - start) };
+    } catch {
+      return { ok: false, ms: 0 };
+    }
+  }
+
   async function probeGithub() {
     const start = performance.now();
     try {
@@ -165,20 +180,36 @@
       state.resolvedMirror = "github";
       state.probing = false;
       updateMirrorBadge();
+      updateMirrorHint();
       return;
     }
     if (state.mirror === "gitee") {
       state.resolvedMirror = "gitee";
       state.probing = false;
       updateMirrorBadge();
+      updateMirrorHint();
       return;
     }
 
-    const result = await probeGithub();
-    state.resolvedMirror = result.ok ? "github" : "gitee";
+    // 自动选线：国内优先 Gitee（GitHub API 有时能通但 Release 下载仍失败）
+    const [giteeResult, githubResult] = await Promise.all([
+      probeGitee(),
+      probeGithub(),
+    ]);
+    state.giteeLatency = giteeResult.ms;
+    state.githubLatency = githubResult.ms;
+
+    if (giteeResult.ok) {
+      state.resolvedMirror = "gitee";
+    } else if (githubResult.ok) {
+      state.resolvedMirror = "github";
+    } else {
+      state.resolvedMirror = "gitee";
+    }
+
     state.probing = false;
-    state.githubLatency = result.ms;
     updateMirrorBadge();
+    updateMirrorHint();
   }
 
   function activeMirror() {
@@ -203,7 +234,30 @@
       const ms = state.githubLatency ? ` · ${state.githubLatency}ms` : "";
       text.textContent = `GitHub${ms}`;
     } else {
-      text.textContent = "Gitee 国内";
+      const ms = state.giteeLatency ? ` · ${state.giteeLatency}ms` : "";
+      text.textContent = `Gitee 国内${ms}`;
+    }
+  }
+
+  function updateMirrorHint() {
+    const hint = $("#mirror-hint");
+    if (!hint) return;
+    const m = activeMirror();
+    if (state.probing) {
+      hint.textContent = "";
+      hint.dataset.visible = "false";
+      return;
+    }
+    if (m === "github") {
+      hint.textContent =
+        "当前为 GitHub 线路，需能访问外网。国内无梯子请点上方「Gitee」。";
+      hint.dataset.visible = "true";
+    } else if (state.mirror === "auto") {
+      hint.textContent = "自动选线已优先 Gitee，适合国内下载。";
+      hint.dataset.visible = "true";
+    } else {
+      hint.textContent = "";
+      hint.dataset.visible = "false";
     }
   }
 
@@ -245,6 +299,8 @@
       chip.setAttribute("aria-pressed", chip.dataset.mirror === state.mirror ? "true" : "false");
     });
 
+    updateMirrorHint();
+
     const notice = $("#mobile-notice");
     if (notice) notice.dataset.visible = state.detectedOs === "mobile" ? "true" : "false";
 
@@ -279,6 +335,7 @@
           state.probing = false;
           state.resolvedMirror = state.mirror;
           updateMirrorBadge();
+          updateMirrorHint();
         }
         await loadLatestRelease(activeMirror());
         updatePlatformUI();

@@ -1,3 +1,5 @@
+mod cloudflare_pages;
+mod edgeone_pages;
 mod gitee_pages;
 mod git_pages;
 mod github_pages;
@@ -5,14 +7,20 @@ mod vercel;
 
 use serde::Serialize;
 
+pub use cloudflare_pages::deploy_cloudflare_pages;
+pub use edgeone_pages::{deploy_edgeone_pages, refresh_edgeone_preview_url};
 pub use gitee_pages::deploy_gitee_pages;
 pub use github_pages::deploy_github_pages;
-pub use vercel::deploy_vercel;
+pub use vercel::{
+    deploy_vercel, vercel_account, vercel_logout, vercel_whoami, VercelAccountInfo,
+};
 
 #[derive(Debug, Serialize)]
 pub struct DeployResult {
     pub success: bool,
     pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub alt_urls: Vec<String>,
     pub log: String,
 }
 

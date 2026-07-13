@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Check,
   Copy,
@@ -11,10 +11,11 @@ import {
   Rocket,
   Sparkles,
 } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
-
+import { AboutFooter } from "@/components/home/AboutFooter";
 import { BrowserPresetPicker } from "@/components/browser/BrowserPresetPicker";
 import { BackendAssistPanel } from "@/components/backend/BackendAssistPanel";
+import { DeployHistoryPanel } from "@/components/deploy/DeployHistoryPanel";
+import { DeployUrlQr } from "@/components/deploy/DeployUrlQr";
 import { WorkbenchIdeLauncher } from "@/components/home/WorkbenchIdeLauncher";
 import { GithubNetworkPanel } from "@/components/github/GithubPanels";
 import { GoalPathPanel } from "@/components/goal/GoalPathPanel";
@@ -30,6 +31,7 @@ import {
 import { useOsInfo } from "@/hooks/useOsInfo";
 import { useTauriCommand } from "@/hooks/useTauriCommand";
 import { fileManagerLabel } from "@/lib/platform-ui";
+import { normalizeDeployShareUrl } from "@/lib/deploy-records";
 import { getGoalLabel } from "@/lib/build-goals";
 import { supportsBackendAssist } from "@/lib/backend-assist";
 import { getIdeOption } from "@/lib/ide";
@@ -47,7 +49,6 @@ const LLM_LABELS: Record<string, string> = {
 };
 
 const GIT_LABELS: Record<string, string> = {
-  gitee: "Gitee",
   github: "GitHub",
   skip: "未配置 Git",
 };
@@ -55,7 +56,8 @@ const GIT_LABELS: Record<string, string> = {
 const DEPLOY_LABELS: Record<string, string> = {
   vercel: "Vercel",
   "github-pages": "GitHub Pages",
-  "gitee-pages": "Gitee Pages",
+  "edgeone-pages": "腾讯云网页托管",
+  "cloudflare-pages": "Cloudflare Pages",
 };
 
 function QuickAction({
@@ -94,6 +96,7 @@ export function HomeDashboard() {
   const selections = useWizardStore((s) => s.selections);
   const openWizard = useWizardStore((s) => s.openWizard);
   const resetForNewProject = useWizardStore((s) => s.resetForNewProject);
+  const deployHistory = useWizardStore((s) => s.deployHistory);
 
   const {
     projectDir,
@@ -106,6 +109,8 @@ export function HomeDashboard() {
     buildGoal,
     appStack,
     wizardTrack,
+    githubRepoName,
+    edgeoneApiToken,
   } = selections;
 
   const [goalDialogOpen, setGoalDialogOpen] = useState(false);
@@ -116,13 +121,17 @@ export function HomeDashboard() {
 
   const packMeta = packId ? getPackMeta(packId) : null;
   const ide = getIdeOption(primaryIde ?? "cursor");
+  const shareDeployUrl = useMemo(
+    () => normalizeDeployShareUrl(deployUrl),
+    [deployUrl],
+  );
 
   const copyUrl = useCallback(async () => {
-    if (!deployUrl) return;
-    await navigator.clipboard.writeText(deployUrl);
+    if (!shareDeployUrl) return;
+    await navigator.clipboard.writeText(shareDeployUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [deployUrl]);
+  }, [shareDeployUrl]);
 
   const revealProject = () => {
     if (!projectDir) return;
@@ -304,29 +313,36 @@ export function HomeDashboard() {
           <QuickAction
             icon={Globe}
             title="Git 与网络"
-            description="GitHub 访问助手、Gitee 配置"
+            description="GitHub 访问助手与网络配置"
             onClick={() => openWizard(wizardStepIndex("git-hosting"))}
           />
         </div>
       </div>
 
-      {deployUrl && (
+      {shareDeployUrl && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Globe className="size-4 text-primary" />
               线上地址
             </CardTitle>
+            {deployTarget === "vercel" && (
+              <CardDescription>
+                vercel.com 国内一般能打开；*.vercel.app
+                静态站多数可访问但速度因网络而异。若打不开请查下方部署记录的「诊断」。
+              </CardDescription>
+            )}
           </CardHeader>
-          <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-start">
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
             <div className="flex-1 space-y-2">
               <a
-                href={deployUrl}
+                href={shareDeployUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1 break-all text-sm text-primary underline-offset-4 hover:underline"
               >
-                {deployUrl}
+                {shareDeployUrl}
                 <ExternalLink className="size-3.5 shrink-0" />
               </a>
               <div className="flex flex-wrap gap-2">
@@ -345,15 +361,21 @@ export function HomeDashboard() {
                 </Button>
               </div>
             </div>
-            <div className="rounded-xl border border-border bg-background p-4">
-              <QRCodeSVG value={deployUrl} size={100} />
-              <p className="mt-2 text-center text-xs text-muted-foreground">
-                扫码分享
-              </p>
+            <DeployUrlQr url={shareDeployUrl} size={100} className="p-4" />
             </div>
           </CardContent>
         </Card>
       )}
+
+      <DeployHistoryPanel
+        projectDir={projectDir}
+        records={deployHistory}
+        showWhenEmpty
+        emptyHint="暂无部署记录。点「重新部署」完成首次上线后会自动保存在这里。"
+        onRedeploy={() => openWizard(wizardStepIndex("deploy"))}
+        edgeoneProjectName={githubRepoName}
+        edgeoneApiToken={edgeoneApiToken}
+      />
 
       {packMeta?.starterPrompt && (
         <Card>
@@ -382,7 +404,7 @@ export function HomeDashboard() {
         <p className="text-sm text-destructive">{revealCommand.error}</p>
       )}
 
-      <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+      <div className="flex flex-wrap gap-2 pt-2">
         <Button
           type="button"
           variant="outline"
@@ -395,6 +417,8 @@ export function HomeDashboard() {
           再做一次
         </Button>
       </div>
+
+      <AboutFooter />
     </div>
     </>
   );

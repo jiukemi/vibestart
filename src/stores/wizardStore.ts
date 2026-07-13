@@ -3,6 +3,8 @@ import { persist } from "zustand/middleware";
 
 import { getGoalDefaults } from "@/lib/build-goals";
 import { bridgeOptionForProvider, needsCodexBridge } from "@/lib/codex-bridge";
+import type { DeployRecord } from "@/lib/deploy-records";
+import { normalizeDeployShareUrl } from "@/lib/deploy-records";
 import { WIZARD_STEPS } from "@/lib/steps";
 import {
   getNextVisibleStepIndex,
@@ -12,7 +14,7 @@ import {
 } from "@/lib/wizard-flow";
 import { wizardStepIndex } from "@/lib/wizard-index";
 
-export type GitProvider = "github" | "gitee" | "skip";
+export type GitProvider = "github" | "skip";
 
 /** 用户想做的产品类型 */
 export type BuildGoal = "website" | "miniprogram" | "app" | "explore";
@@ -36,8 +38,11 @@ export interface WizardSelections {
   deployTarget: string | null;
   projectDir: string | null;
   githubUsername: string | null;
-  giteeUsername: string | null;
   githubRepoName: string | null;
+  edgeoneApiToken: string | null;
+  cloudflareApiToken: string | null;
+  cloudflareAccountId: string | null;
+  vercelUsername: string | null;
   deployUrl: string | null;
   llmSyncTargets: string[];
   backendAssistEnabled: boolean;
@@ -51,6 +56,7 @@ interface WizardState {
   completedSteps: number[];
   appPhase: "wizard" | "home";
   selections: WizardSelections;
+  deployHistory: DeployRecord[];
   setCurrentStep: (step: number) => void;
   completeStep: (step: number) => void;
   goNext: () => void;
@@ -59,6 +65,9 @@ interface WizardState {
     key: K,
     value: WizardSelections[K],
   ) => void;
+  addDeployRecord: (record: DeployRecord) => void;
+  removeDeployRecord: (id: string) => void;
+  updateDeployRecord: (id: string, patch: Partial<Pick<DeployRecord, "url" | "altUrls" | "log" | "success">>) => void;
   /** 切换向导轨；完整轨且尚未确认方向时清空 buildGoal，避免沿用迁移默认 explore */
   setWizardTrack: (track: WizardTrack) => void;
   enterHome: () => void;
@@ -83,11 +92,14 @@ const defaultSelections: WizardSelections = {
   llmProvider: null,
   packId: null,
   gitProvider: "skip",
-  deployTarget: "vercel",
+  deployTarget: "edgeone-pages",
   projectDir: null,
   githubUsername: null,
-  giteeUsername: null,
   githubRepoName: "my-vibe-project",
+  edgeoneApiToken: null,
+  cloudflareApiToken: null,
+  cloudflareAccountId: null,
+  vercelUsername: null,
   deployUrl: null,
   llmSyncTargets: [],
   backendAssistEnabled: false,
@@ -130,6 +142,7 @@ export const useWizardStore = create<WizardState>()(
       completedSteps: [],
       appPhase: "wizard",
       selections: { ...defaultSelections },
+      deployHistory: [],
 
       setCurrentStep: (step) => {
         set({ currentStep: clampStep(step) });
@@ -165,6 +178,41 @@ export const useWizardStore = create<WizardState>()(
             ...state.selections,
             [key]: value,
           }),
+        }));
+      },
+
+      addDeployRecord: (record) => {
+        set((state) => ({
+          deployHistory: [record, ...state.deployHistory].slice(0, 50),
+        }));
+      },
+
+      removeDeployRecord: (id) => {
+        set((state) => ({
+          deployHistory: state.deployHistory.filter((r) => r.id !== id),
+        }));
+      },
+
+      updateDeployRecord: (id, patch) => {
+        set((state) => ({
+          deployHistory: state.deployHistory.map((r) =>
+            r.id === id
+              ? {
+                  ...r,
+                  ...patch,
+                  url:
+                    patch.url !== undefined
+                      ? normalizeDeployShareUrl(patch.url)
+                      : r.url,
+                  altUrls:
+                    patch.altUrls !== undefined
+                      ? patch.altUrls
+                          .map((u) => normalizeDeployShareUrl(u))
+                          .filter((u): u is string => Boolean(u))
+                      : r.altUrls,
+                }
+              : r,
+          ),
         }));
       },
 
@@ -272,10 +320,14 @@ export const useWizardStore = create<WizardState>()(
     }),
     {
       name: "vibestart-wizard",
-      version: 10,
+      version: 15,
       migrate: (persistedState, fromVersion) => {
         const state = persistedState as Partial<WizardState>;
         const maxStep = WIZARD_STEPS.length - 1;
+
+        if (fromVersion < 14) {
+          state.deployHistory = [];
+        }
 
         if (fromVersion < 3) {
           if (typeof state.currentStep === "number" && state.currentStep >= 1) {
@@ -341,6 +393,50 @@ export const useWizardStore = create<WizardState>()(
           }
         }
 
+        if (fromVersion < 15 && state.selections) {
+          const sel = state.selections as unknown as Record<string, unknown>;
+          if (sel.cloudflareAccountId === undefined) {
+            sel.cloudflareAccountId = null;
+          }
+        }
+
+        if (fromVersion < 13 && state.selections) {
+          const sel = state.selections as unknown as Record<string, unknown>;
+          if (sel.vercelUsername === undefined) {
+            sel.vercelUsername = null;
+          }
+        }
+
+        if (fromVersion < 12 && state.selections) {
+          const sel = state.selections as unknown as Record<string, unknown>;
+          if (sel.deployTarget === "jihulab-pages") {
+            sel.deployTarget = "edgeone-pages";
+          }
+          if (sel.gitProvider === "jihulab") {
+            sel.gitProvider = "skip";
+          }
+          if (sel.edgeoneApiToken === undefined) {
+            sel.edgeoneApiToken = null;
+          }
+          if (sel.cloudflareApiToken === undefined) {
+            sel.cloudflareApiToken = null;
+          }
+          delete sel.jihulabUsername;
+        }
+
+        if (fromVersion < 11 && state.selections) {
+          const sel = state.selections as unknown as Record<string, unknown>;
+          if (sel.gitProvider === "gitee") {
+            sel.gitProvider = "jihulab";
+          }
+          if (sel.deployTarget === "gitee-pages") {
+            sel.deployTarget = "jihulab-pages";
+          }
+          if (typeof sel.giteeUsername === "string" && !sel.jihulabUsername) {
+            sel.jihulabUsername = sel.giteeUsername;
+          }
+        }
+
         if (fromVersion < 10 && state.selections) {
           if (!state.selections.userIntent) {
             state.selections.userIntent = "fresh";
@@ -390,6 +486,7 @@ export const useWizardStore = create<WizardState>()(
         completedSteps: state.completedSteps,
         appPhase: state.appPhase,
         selections: state.selections,
+        deployHistory: state.deployHistory,
       }),
       merge: (persisted, current) => {
         const saved = persisted as Partial<WizardState> | undefined;
@@ -400,6 +497,7 @@ export const useWizardStore = create<WizardState>()(
           currentStep: clampStep(saved.currentStep),
           completedSteps: saved.completedSteps ?? current.completedSteps,
           appPhase: saved.appPhase ?? current.appPhase,
+          deployHistory: saved.deployHistory ?? current.deployHistory,
           selections: mergeSelections(saved.selections),
         };
       },

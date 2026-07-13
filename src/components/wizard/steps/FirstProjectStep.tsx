@@ -114,7 +114,7 @@ export function FirstProjectStep() {
     return (
       <StepShell
         title="选择已有项目"
-        description="指向已包含 index.html 的项目文件夹，下一步即可部署到 Gitee Pages 或 Vercel"
+        description="指向已包含 index.html 的项目文件夹，下一步用腾讯云等方式部署上线"
         nextDisabled={!isReady}
       >
         <div className="space-y-4">

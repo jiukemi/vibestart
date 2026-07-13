@@ -116,6 +116,25 @@ pub fn npm_bin_dir(prefix: &Path) -> PathBuf {
     prefix.join("bin")
 }
 
+/// Windows 上 `npm install --prefix DIR -g` 会把 `.cmd`  shim 放在 prefix 根目录，而非 prefix/bin。
+pub fn npm_cli_search_dirs(prefix: &Path) -> Vec<PathBuf> {
+    let bin = npm_bin_dir(prefix);
+    if cfg!(target_os = "windows") {
+        vec![prefix.to_path_buf(), bin]
+    } else {
+        vec![bin]
+    }
+}
+
+fn resolve_cli_in_npm_prefix(cmd: &str, prefix: &Path) -> Option<PathBuf> {
+    for dir in npm_cli_search_dirs(prefix) {
+        if let Some(path) = resolve_command_in_dir(cmd, &dir) {
+            return Some(path);
+        }
+    }
+    None
+}
+
 pub fn get_tools_install_info() -> ToolsInstallInfo {
     let config = tools_install_config();
     let paths = resolve_paths(&config);
@@ -147,11 +166,11 @@ pub fn get_tools_install_info() -> ToolsInstallInfo {
 
 pub fn extra_path_prefixes() -> Vec<PathBuf> {
     let paths = resolve_paths(&tools_install_config());
-    vec![npm_bin_dir(&paths.npm_prefix)]
+    npm_cli_search_dirs(&paths.npm_prefix)
 }
 
 pub fn resolve_command_in_prefix(cmd: &str) -> Option<String> {
-    resolve_command_in_dir(cmd, &npm_bin_dir(&resolve_paths(&tools_install_config()).npm_prefix))
+    resolve_cli_in_npm_prefix(cmd, &resolve_paths(&tools_install_config()).npm_prefix)
         .map(|p| p.to_string_lossy().into_owned())
 }
 
@@ -574,7 +593,7 @@ pub fn npm_command_process() -> Result<Command, String> {
 
 /// Vercel / Claude 等：先查 VibeStart npm 前缀，再查系统 PATH
 pub fn resolve_cli_command(cmd: &str) -> Option<PathBuf> {
-    resolve_command_in_dir(cmd, &npm_bin_dir(&resolve_paths(&tools_install_config()).npm_prefix))
+    resolve_cli_in_npm_prefix(cmd, &resolve_paths(&tools_install_config()).npm_prefix)
         .or_else(|| which_in_system_path(cmd))
 }
 
@@ -594,7 +613,9 @@ pub fn apply_npm_runtime_env(cmd: &mut Command) {
         }
     }
     let paths = resolve_paths(&tools_install_config());
-    prepend_path_env(cmd, &npm_bin_dir(&paths.npm_prefix));
+    for dir in npm_cli_search_dirs(&paths.npm_prefix) {
+        prepend_path_env(cmd, &dir);
+    }
     crate::mirrors::apply_npm_registry(cmd);
 }
 

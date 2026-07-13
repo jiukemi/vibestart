@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Copy, SkipForward } from "lucide-react";
 
 import { BrowserPresetPicker } from "@/components/browser/BrowserPresetPicker";
-import { GiteeBrowserPanel } from "@/components/gitee/GiteePanels";
 import {
   GithubBrowserPanel,
   GithubNetworkPanel,
@@ -15,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { TENCENT_PAGES_NAME } from "@/components/deploy/EdgeOnePanels";
 import { StepShell } from "@/components/wizard/StepShell";
 import { useTauriCommand } from "@/hooks/useTauriCommand";
 import { interpretGitSshTest } from "@/lib/git-ssh-test";
@@ -26,9 +26,8 @@ import { cn } from "@/lib/utils";
 const step = getStepMeta("git-hosting");
 
 const TRACKS: { id: GitProvider; title: string; hint: string }[] = [
-  { id: "gitee", title: "Gitee", hint: "国内推荐" },
-  { id: "github", title: "GitHub", hint: "国际生态" },
-  { id: "skip", title: "跳过 Git", hint: "仅 Vercel 部署" },
+  { id: "skip", title: "跳过 Git", hint: "CLI 一键部署" },
+  { id: "github", title: "GitHub", hint: "纯外网 · 学 Git" },
 ];
 
 const SUB_STEPS = [
@@ -39,16 +38,15 @@ const SUB_STEPS = [
 ] as const;
 
 export function GitHostingStep() {
-  const gitProvider = useWizardStore((s) => s.selections.gitProvider) ?? "gitee";
+  const gitProvider = useWizardStore((s) => s.selections.gitProvider) ?? "skip";
   const githubUsername = useWizardStore((s) => s.selections.githubUsername);
-  const giteeUsername = useWizardStore((s) => s.selections.giteeUsername);
   const githubRepoName = useWizardStore((s) => s.selections.githubRepoName);
   const setSelection = useWizardStore((s) => s.setSelection);
 
   const [subStep, setSubStep] = useState(0);
   const [copied, setCopied] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
-  const [suggestGitee, setSuggestGitee] = useState(false);
+  const [githubUnreachable, setGithubUnreachable] = useState(false);
 
   const { run: runConnectivity, data: connectivity } =
     useTauriCommand<GithubConnectivity>();
@@ -60,19 +58,10 @@ export function GitHostingStep() {
   useEffect(() => {
     void runConnectivity("test_github_connectivity").then((result) => {
       if (result && !result.reachable) {
-        setSuggestGitee(true);
+        setGithubUnreachable(true);
       }
     });
   }, [runConnectivity]);
-
-  const username = gitProvider === "gitee" ? giteeUsername : githubUsername;
-  const setUsername = (value: string) => {
-    if (gitProvider === "gitee") {
-      setSelection("giteeUsername", value);
-    } else {
-      setSelection("githubUsername", value);
-    }
-  };
 
   const ensureKey = useCallback(async () => {
     await runEnsureKey("ensure_ssh_key");
@@ -86,31 +75,20 @@ export function GitHostingStep() {
   }, [sshData?.public_key]);
 
   const testSsh = useCallback(async () => {
-    const cmd = gitProvider === "gitee" ? "test_gitee_ssh" : "test_github_ssh";
-    const result = await runTestSsh(cmd);
+    const result = await runTestSsh("test_github_ssh");
     setTestResult(result ?? null);
-  }, [gitProvider, runTestSsh]);
+  }, [runTestSsh]);
 
   const guideStage = SUB_STEPS[subStep]?.stage ?? "register";
 
   const sshInterpretation = useMemo(() => {
     if (!testResult || gitProvider === "skip") return null;
-    return interpretGitSshTest(
-      testResult,
-      gitProvider === "gitee" ? "gitee" : "github",
-    );
+    return interpretGitSshTest(testResult, "github");
   }, [testResult, gitProvider]);
-
-  const renderHostPanel = () =>
-    gitProvider === "gitee" ? (
-      <GiteeBrowserPanel stage={guideStage} />
-    ) : (
-      <GithubBrowserPanel compact stage={guideStage} />
-    );
 
   const canProceedSub =
     subStep === 0 ||
-    (subStep === 1 && (username ?? "").trim().length > 0) ||
+    (subStep === 1 && (githubUsername ?? "").trim().length > 0) ||
     (subStep === 2 && sshData?.public_key) ||
     subStep === 3;
 
@@ -118,12 +96,10 @@ export function GitHostingStep() {
     setSelection("gitProvider", track);
     setSubStep(0);
     setTestResult(null);
-    if (track === "gitee") {
-      setSelection("deployTarget", "gitee-pages");
-    } else if (track === "github") {
+    if (track === "github") {
       setSelection("deployTarget", "github-pages");
     } else {
-      setSelection("deployTarget", "vercel");
+      setSelection("deployTarget", "edgeone-pages");
     }
   };
 
@@ -131,7 +107,7 @@ export function GitHostingStep() {
     return (
       <StepShell
         title={step.title}
-        description="不配置 Git 也可以完成部署 —— 使用 Vercel 即可分享作品。"
+        description={`不配置 Git 也可以完成部署 —— 推荐${TENCENT_PAGES_NAME}或 Cloudflare 一键上线。`}
         hideNext
         nextDisabled
       >
@@ -153,14 +129,15 @@ export function GitHostingStep() {
               跳过 Git 托管
             </CardTitle>
             <CardDescription>
-              适合只想快速上线、暂不学习 Git 的用户。后续可在「Git 托管」步骤回来配置。
+              适合只想快速上线、暂不学习 Git 的用户。部署步骤默认使用
+              {TENCENT_PAGES_NAME}（国内推荐）。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <ul className="list-inside list-disc space-y-1">
-              <li>部署步骤默认使用 Vercel（约 30 秒上线）</li>
+              <li>部署步骤可选腾讯云 / Cloudflare / Vercel 一键部署</li>
               <li>Cursor 等 IDE 注册仍可用邮箱，无需 GitHub</li>
-              <li>以后想学习 Git，可选 Gitee 或 GitHub 轨道</li>
+              <li>以后想学习 Git，可切换 GitHub 轨道（纯外网）</li>
             </ul>
           </CardContent>
         </Card>
@@ -170,16 +147,10 @@ export function GitHostingStep() {
     );
   }
 
-  const hostLabel = gitProvider === "gitee" ? "Gitee" : "GitHub";
-  const pagesHint =
-    gitProvider === "gitee"
-      ? "Gitee Pages 需完成实名认证，免费版更新后需手动点「更新」。"
-      : "GitHub Pages 适合学习 git push 发布流程。";
-
   return (
     <StepShell
       title={step.title}
-      description={`配置 ${hostLabel} 账号与仓库，用于代码托管与 Pages 部署。${pagesHint}`}
+      description={`配置 GitHub 账号与仓库，用于 git push 发布 Pages。国内用户建议优先${TENCENT_PAGES_NAME}。`}
       hideNext
       nextDisabled
     >
@@ -194,33 +165,21 @@ export function GitHostingStep() {
         ))}
       </div>
 
-      {suggestGitee && gitProvider === "github" && (
+      {githubUnreachable && (
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardContent className="pt-4 text-sm text-muted-foreground">
             检测到 GitHub 当前不可达（
             {connectivity?.latency_ms != null
               ? `${connectivity.latency_ms}ms`
               : "超时"}
-            ）。建议切换到 <strong className="text-foreground">Gitee</strong>{" "}
-            国内轨道，或配置网络加速后继续 GitHub。
+            ）。GitHub 为纯外网服务，国内用户建议改用{" "}
+            <strong className="text-foreground">{TENCENT_PAGES_NAME}</strong>{" "}
+            部署，或配置网络加速后继续 GitHub。
           </CardContent>
         </Card>
       )}
 
-      {suggestGitee && gitProvider === "gitee" && (
-        <Card className="border-amber-500/30 bg-amber-500/5">
-          <CardContent className="pt-4 text-sm text-muted-foreground">
-            检测到 GitHub 当前不可达（
-            {connectivity?.latency_ms != null
-              ? `${connectivity.latency_ms}ms`
-              : "超时"}
-            ），已为你推荐 <strong className="text-foreground">Gitee</strong>{" "}
-            国内轨道。仍可手动切换 GitHub 并配置网络加速。
-          </CardContent>
-        </Card>
-      )}
-
-      {gitProvider === "github" && <GithubNetworkPanel />}
+      <GithubNetworkPanel />
 
       <div className="mb-4 flex flex-wrap gap-2">
         {SUB_STEPS.map((s, i) => (
@@ -244,31 +203,20 @@ export function GitHostingStep() {
 
       {subStep === 0 && (
         <>
-          {renderHostPanel()}
+          <GithubBrowserPanel compact stage={guideStage} />
           <BrowserPresetPicker compact defaultCollapsed />
           <Card>
             <CardHeader>
-              <CardTitle>注册 {hostLabel} 账号</CardTitle>
+              <CardTitle>注册 GitHub 账号</CardTitle>
               <CardDescription>
-                点击上方按钮在浏览器中完成注册
-                {gitProvider === "gitee" ? "并完成实名认证" : ""}，无需切换浏览器。
+                点击上方按钮在浏览器中完成注册，无需切换浏览器。
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm text-muted-foreground">
               <ol className="list-inside list-decimal space-y-2">
-                {gitProvider === "gitee" ? (
-                  <>
-                    <li>手机号或邮箱注册 Gitee</li>
-                    <li>进入「账号设置」完成实名认证（开启 Pages 必需）</li>
-                    <li>记住你的用户名（路径前缀），下一步会用到</li>
-                  </>
-                ) : (
-                  <>
-                    <li>填写邮箱、密码、用户名</li>
-                    <li>验证邮箱并完成新手引导</li>
-                    <li>记住你的用户名，下一步会用到</li>
-                  </>
-                )}
+                <li>填写邮箱、密码、用户名</li>
+                <li>验证邮箱并完成新手引导</li>
+                <li>记住你的用户名，下一步会用到</li>
               </ol>
             </CardContent>
           </Card>
@@ -277,12 +225,12 @@ export function GitHostingStep() {
 
       {subStep === 1 && (
         <>
-          {renderHostPanel()}
+          <GithubBrowserPanel compact stage={guideStage} />
           <Card>
             <CardHeader>
               <CardTitle>创建仓库</CardTitle>
               <CardDescription>
-                点击「创建仓库」，建议命名为 my-vibe-project。
+                点击「创建仓库」，建议命名为 my-vibe-project。可见性请选择公开（Public）。
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -297,13 +245,15 @@ export function GitHostingStep() {
                     htmlFor="git-username"
                     className="text-sm font-medium text-foreground"
                   >
-                    {hostLabel} 用户名
+                    GitHub 用户名
                   </label>
                   <input
                     id="git-username"
                     type="text"
-                    value={username ?? ""}
-                    onChange={(e) => setUsername(e.target.value)}
+                    value={githubUsername ?? ""}
+                    onChange={(e) =>
+                      setSelection("githubUsername", e.target.value)
+                    }
                     placeholder="your-username"
                     className="flex h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                   />
@@ -334,112 +284,104 @@ export function GitHostingStep() {
 
       {subStep === 2 && (
         <>
-          {renderHostPanel()}
+          <GithubBrowserPanel compact stage={guideStage} />
           <Card>
-          <CardHeader>
-            <CardTitle>配置 SSH 密钥</CardTitle>
-            <CardDescription>
-              生成密钥后，在浏览器打开「SSH 公钥」页面粘贴公钥。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void ensureKey()}
-              disabled={sshLoading}
-            >
-              {sshLoading ? "生成中…" : "生成 / 确认 SSH 密钥"}
-            </Button>
-            {sshError && (
-              <p className="text-sm text-destructive">{sshError}</p>
-            )}
-            {sshData?.public_key && (
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">
-                  公钥路径：{sshData.key_path}.pub — 复制后在 {hostLabel} SSH
-                  密钥设置页粘贴
-                </p>
-                <div className="relative">
-                  <pre className="max-h-32 overflow-auto rounded-lg border border-border bg-muted/50 p-3 text-xs text-foreground dark:bg-muted/30">
-                    {sshData.public_key}
-                  </pre>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="absolute top-2 right-2"
-                    onClick={() => void copyPublicKey()}
-                  >
-                    {copied ? (
-                      <Check className="size-3.5" />
-                    ) : (
-                      <Copy className="size-3.5" />
-                    )}
-                    {copied ? "已复制" : "复制公钥"}
-                  </Button>
+            <CardHeader>
+              <CardTitle>配置 SSH 密钥</CardTitle>
+              <CardDescription>
+                生成密钥后，在浏览器打开「SSH 公钥」页面粘贴公钥。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void ensureKey()}
+                disabled={sshLoading}
+              >
+                {sshLoading ? "生成中…" : "生成 / 确认 SSH 密钥"}
+              </Button>
+              {sshError && (
+                <p className="text-sm text-destructive">{sshError}</p>
+              )}
+              {sshData?.public_key && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    公钥路径：{sshData.key_path}.pub — 复制后在 GitHub SSH
+                    密钥设置页粘贴
+                  </p>
+                  <div className="relative">
+                    <pre className="max-h-32 overflow-auto rounded-lg border border-border bg-muted/50 p-3 text-xs text-foreground dark:bg-muted/30">
+                      {sshData.public_key}
+                    </pre>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="absolute top-2 right-2"
+                      onClick={() => void copyPublicKey()}
+                    >
+                      {copied ? (
+                        <Check className="size-3.5" />
+                      ) : (
+                        <Copy className="size-3.5" />
+                      )}
+                      {copied ? "已复制" : "复制公钥"}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              )}
+            </CardContent>
+          </Card>
         </>
       )}
 
       {subStep === 3 && (
         <>
-          {renderHostPanel()}
+          <GithubBrowserPanel compact stage={guideStage} />
           <Card>
-          <CardHeader>
-            <CardTitle>测试 {hostLabel} SSH 连接</CardTitle>
-            <CardDescription>
-              确认 SSH 密钥已添加
-              {gitProvider === "github" ? "；若失败，检查网络加速。" : "。"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void testSsh()}
-              disabled={testLoading}
-            >
-              {testLoading ? "测试中…" : "测试 SSH 连接"}
-            </Button>
-            {sshInterpretation && (
-              <div
-                className={cn(
-                  "rounded-lg border px-3 py-2 text-sm",
-                  sshInterpretation.success
-                    ? "border-emerald-500/40 bg-emerald-500/5 text-emerald-800 dark:text-emerald-300"
-                    : "border-amber-500/40 bg-amber-500/5 text-amber-900 dark:text-amber-200",
-                )}
+            <CardHeader>
+              <CardTitle>测试 GitHub SSH 连接</CardTitle>
+              <CardDescription>
+                确认 SSH 密钥已添加；若失败，检查网络加速。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void testSsh()}
+                disabled={testLoading}
               >
-                <p className="font-medium">{sshInterpretation.summary}</p>
-                {sshInterpretation.success && gitProvider === "gitee" && (
-                  <p className="mt-2 text-xs opacity-90">
-                    「does not provide shell access」表示 Gitee
-                    不提供远程终端，这是正常提示，不代表失败。之后可以用 git push
-                    推送代码。
-                  </p>
-                )}
-              </div>
-            )}
-            {testError && (
-              <p className="text-sm text-destructive">{testError}</p>
-            )}
-            {sshInterpretation?.detail && (
-              <details className="text-xs text-muted-foreground">
-                <summary className="cursor-pointer select-none">
-                  查看原始输出
-                </summary>
-                <pre className="mt-2 overflow-auto rounded-lg border border-border bg-muted/50 p-3 whitespace-pre-wrap text-foreground dark:bg-muted/30">
-                  {sshInterpretation.detail}
-                </pre>
-              </details>
-            )}
-          </CardContent>
-        </Card>
+                {testLoading ? "测试中…" : "测试 SSH 连接"}
+              </Button>
+              {sshInterpretation && (
+                <div
+                  className={cn(
+                    "rounded-lg border px-3 py-2 text-sm",
+                    sshInterpretation.success
+                      ? "border-emerald-500/40 bg-emerald-500/5 text-emerald-800 dark:text-emerald-300"
+                      : "border-amber-500/40 bg-amber-500/5 text-amber-900 dark:text-amber-200",
+                  )}
+                >
+                  <p className="font-medium">{sshInterpretation.summary}</p>
+                </div>
+              )}
+              {testError && (
+                <p className="text-sm text-destructive">{testError}</p>
+              )}
+              {sshInterpretation?.detail && (
+                <details className="text-xs text-muted-foreground">
+                  <summary className="cursor-pointer select-none">
+                    查看原始输出
+                  </summary>
+                  <pre className="mt-2 overflow-auto rounded-lg border border-border bg-muted/50 p-3 whitespace-pre-wrap text-foreground dark:bg-muted/30">
+                    {sshInterpretation.detail}
+                  </pre>
+                </details>
+              )}
+            </CardContent>
+          </Card>
         </>
       )}
 

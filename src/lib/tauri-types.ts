@@ -57,7 +57,25 @@ export interface DownloadUpdateResult {
 export interface DeployResult {
   success: boolean;
   url: string | null;
+  alt_urls?: string[];
   log: string;
+}
+
+export interface UrlProbeResult {
+  url: string;
+  reachable: boolean;
+  status_code: number | null;
+  latency_ms: number | null;
+  final_url: string | null;
+  looks_like_login_page: boolean;
+  message: string;
+  suggestions: string[];
+}
+
+export interface VercelAccountInfo {
+  current_scope: string;
+  personal_scope: string;
+  display_label: string;
 }
 
 export interface CommandResult {

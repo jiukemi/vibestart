@@ -265,6 +265,12 @@ fn run_for_tool(tool: &str, action: ToolAction, app: Option<&AppHandle>) -> Comm
         ("vercel", ToolAction::Install, _) => ("npm", vec!["install", "-g", "vercel"]),
         ("vercel", ToolAction::Upgrade, _) => ("npm", vec!["install", "-g", "vercel"]),
         ("vercel", ToolAction::Uninstall, _) => ("npm", vec!["uninstall", "-g", "vercel"]),
+        ("edgeone", ToolAction::Install, _) => ("npm", vec!["install", "-g", "edgeone"]),
+        ("edgeone", ToolAction::Upgrade, _) => ("npm", vec!["install", "-g", "edgeone"]),
+        ("edgeone", ToolAction::Uninstall, _) => ("npm", vec!["uninstall", "-g", "edgeone"]),
+        ("wrangler", ToolAction::Install, _) => ("npm", vec!["install", "-g", "wrangler"]),
+        ("wrangler", ToolAction::Upgrade, _) => ("npm", vec!["install", "-g", "wrangler"]),
+        ("wrangler", ToolAction::Uninstall, _) => ("npm", vec!["uninstall", "-g", "wrangler"]),
         ("flutter", ToolAction::Install, Platform::Macos) => {
             ("brew", vec!["install", "--cask", "flutter"])
         }
@@ -452,6 +458,8 @@ fn npm_cli_for_tool(tool: &str) -> Option<&'static str> {
     match tool {
         "claude-code" => Some("claude"),
         "vercel" => Some("vercel"),
+        "edgeone" => Some("edgeone"),
+        "wrangler" => Some("wrangler"),
         _ => None,
     }
 }
@@ -466,11 +474,15 @@ fn verify_npm_cli_install(
     }
 
     let Some(path) = tools_install::resolve_cli_command(cli) else {
+        let search_dirs = tools_install::npm_cli_search_dirs(&paths.npm_prefix)
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(" 或 ");
         result.success = false;
         result.log.push_str(&format!(
-            "\n\n安装未完成：未在 {} 找到 {cli} 可执行文件。\n\
-             请确认 Node.js / npm 可用后重试。",
-            tools_install::npm_bin_dir(&paths.npm_prefix).display()
+            "\n\n安装未完成：未在 {search_dirs} 找到 {cli} 可执行文件。\n\
+             请确认 Node.js / npm 可用后重试。"
         ));
         return result;
     };

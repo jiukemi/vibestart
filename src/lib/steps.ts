@@ -44,7 +44,7 @@ export const WIZARD_STEPS: WizardStep[] = [
   {
     id: "git-hosting",
     title: "Git 托管",
-    description: "Gitee / GitHub 注册、建仓库、SSH；也可跳过仅用 Vercel",
+    description: "GitHub 注册、建仓库、SSH；也可跳过，用腾讯云 / Cloudflare 一键部署",
   },
   {
     id: "first-project",
@@ -54,7 +54,7 @@ export const WIZARD_STEPS: WizardStep[] = [
   {
     id: "deploy",
     title: "部署上线",
-    description: "部署到 Gitee Pages（国内推荐）或 Vercel",
+    description: "腾讯云网页托管（国内推荐）、Cloudflare Pages、GitHub Pages 或 Vercel",
   },
   {
     id: "complete",

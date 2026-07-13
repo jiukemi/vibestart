@@ -141,7 +141,7 @@ export function GithubNetworkPanel() {
         </CardTitle>
         <CardDescription>
           VibeStart <strong className="font-medium text-foreground">不提供 VPN</strong>。
-          若你已有 VPN/Clash，助手帮你检测并把代理写入 Git；若 GitHub 仍不通，建议改走 Gitee。
+          若你已有 VPN/Clash，助手帮你检测并把代理写入 Git；若 GitHub 仍不通，建议改用腾讯云网页托管。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -154,7 +154,7 @@ export function GithubNetworkPanel() {
             </li>
             <li>
               <strong className="text-foreground">没有 VPN</strong>
-              ：GitHub 可能无法访问，请选向导里的 <strong className="text-foreground">Gitee</strong> 或「跳过 Git」用 Vercel 部署。
+              ：GitHub 可能无法访问，请选向导里的 <strong className="text-foreground">腾讯云网页托管</strong> 或「跳过 Git」一键部署。
             </li>
             <li>
               助手解决的是<strong className="text-foreground">注册、SSH、Git 推送</strong>，不是替代 VPN 产品。

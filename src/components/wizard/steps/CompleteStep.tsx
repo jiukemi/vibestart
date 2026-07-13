@@ -88,9 +88,12 @@ export function CompleteStep() {
             </dl>
 
             {deployUrl ? (
-              <div className="flex flex-col gap-4 border-t border-border pt-4 sm:flex-row sm:items-start">
-                <div className="flex-1 space-y-3">
-                  <p className="text-sm font-medium text-foreground">你的网站地址</p>
+              <div className="flex flex-col gap-4 border-t border-border pt-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                  <div className="flex-1 space-y-3">
+                    <p className="text-sm font-medium text-foreground">
+                      你的网站地址
+                    </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <a
                       href={deployUrl}
@@ -125,6 +128,7 @@ export function CompleteStep() {
                     扫码访问
                   </p>
                 </div>
+              </div>
               </div>
             ) : (
               <p className="border-t border-border pt-4 text-sm text-muted-foreground">

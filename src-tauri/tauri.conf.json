@@ -14,8 +14,8 @@
     "windows": [
       {
         "title": "VibeStart",
-        "width": 1200,
-        "height": 820,
+        "width": 1280,
+        "height": 720,
         "minWidth": 960,
         "minHeight": 640,
         "center": true,

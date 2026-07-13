@@ -426,7 +426,19 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 22px;
+  margin-bottom: 10px;
+}
+
+.mirror-hint {
+  margin: 0 0 18px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  display: none;
+}
+
+.mirror-hint[data-visible="true"] {
+  display: block;
 }
 
 .mirror-chip {

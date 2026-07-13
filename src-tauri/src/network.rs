@@ -418,3 +418,151 @@ pub fn use_detected_proxy() -> Result<NetworkConfig, String> {
             .or_else(|| Some("127.0.0.1:7890".into())),
     })
 }
+
+#[derive(Debug, Serialize)]
+pub struct UrlProbeResult {
+    pub url: String,
+    pub reachable: bool,
+    pub status_code: Option<u16>,
+    pub latency_ms: Option<u64>,
+    pub final_url: Option<String>,
+    pub looks_like_login_page: bool,
+    pub message: String,
+    pub suggestions: Vec<String>,
+}
+
+/// 探测部署链接是否可访问（用于部署后诊断）
+pub fn probe_deploy_url(url: &str) -> UrlProbeResult {
+    let url = url.trim();
+    let detected = detect_proxies();
+    let network = load_config().network.unwrap_or_default();
+
+    let mut builder = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .cookie_store(true)
+        .user_agent("VibeStart/0.1");
+
+    if network.enabled && !network.http_proxy.trim().is_empty() {
+        if let Ok(proxy) = reqwest::Proxy::all(&network.http_proxy) {
+            builder = builder.proxy(proxy);
+        }
+    } else if let Some(detected_proxy) = detected.iter().find_map(|p| p.http_proxy.as_ref()) {
+        if let Ok(proxy) = reqwest::Proxy::all(detected_proxy) {
+            builder = builder.proxy(proxy);
+        }
+    }
+
+    let mut suggestions = Vec::new();
+    if url.contains(".vercel.app") {
+        suggestions.push(
+            "vercel.com 注册/登录国内一般能打开；已部署的 *.vercel.app 静态站多数也能访问，但无国内 CDN，速度因网络而异。".into(),
+        );
+        suggestions.push(
+            "若打开是 Vercel 登录页：说明链接不对（常见为 site-xxx 临时地址），请用 Aliased 生产域名或重新部署。".into(),
+        );
+        suggestions.push(
+            "国内要稳定秒开请用「腾讯云网页托管」；或在 Vercel 控制台绑定自定义域名。".into(),
+        );
+    }
+    if url.contains(".edgeone.cool") || url.contains(".edgeone.app") || url.contains(".edgeone.site") {
+        suggestions.push(
+            "EdgeOne 预览链须完整打开（含 ?eo_token=）；首次访问会 302 写入 cookie 后跳转到裸域名。".into(),
+        );
+        suggestions.push(
+            "若只打开裸域名（无 ?eo_token=）会 401；过期请点「刷新预览链」重新生成。".into(),
+        );
+    }
+
+    let client = match builder.build() {
+        Ok(c) => c,
+        Err(e) => {
+            return UrlProbeResult {
+                url: url.into(),
+                reachable: false,
+                status_code: None,
+                latency_ms: None,
+                final_url: None,
+                looks_like_login_page: false,
+                message: format!("创建网络客户端失败: {e}"),
+                suggestions,
+            };
+        }
+    };
+
+    let start = std::time::Instant::now();
+    match client.get(url).send() {
+        Ok(res) => {
+            let status = res.status().as_u16();
+            let final_url = res.url().to_string();
+            let latency_ms = start.elapsed().as_millis() as u64;
+            let body_sample = res
+                .text()
+                .unwrap_or_default()
+                .chars()
+                .take(4096)
+                .collect::<String>()
+                .to_lowercase();
+            let looks_like_login = body_sample.contains("log in to vercel")
+                || body_sample.contains("continue with email")
+                    && body_sample.contains("vercel");
+            let is_edgeone = url.contains(".edgeone.cool")
+                || url.contains(".edgeone.app")
+                || url.contains(".edgeone.site");
+            let edgeone_auth_page = is_edgeone
+                && (body_sample.contains("authorization required")
+                    || body_sample.contains("eo_time missing")
+                    || body_sample.contains("eo_token"));
+            let reachable = if is_edgeone && url.contains("eo_token=") {
+                status >= 200 && status < 400 && !edgeone_auth_page
+            } else {
+                status >= 200 && status < 400 && !looks_like_login
+            };
+
+            let message = if looks_like_login {
+                "链接返回了 Vercel 登录页，不是已上线的网站。可能是临时部署地址未绑定域名，或部署未完成。".into()
+            } else if edgeone_auth_page {
+                "EdgeOne 返回 401：请用完整预览链（含 ?eo_token=）在浏览器打开；裸域名需先有 cookie。".into()
+            } else if is_edgeone && status == 302 {
+                "EdgeOne 预览链有效（正在写入访问 cookie 并跳转）".into()
+            } else if status >= 200 && status < 400 {
+                format!("链接可访问（HTTP {status}，{latency_ms} ms）")
+            } else {
+                format!("HTTP 状态异常: {status}")
+            };
+
+            if looks_like_login {
+                suggestions.push("这是 Vercel 登录页，不是已上线的网站——请用日志里 Aliased 行的链接，或 Vercel 控制台 → Project → Domains。".into());
+                suggestions.push("重新部署时会自动 link 项目，生成稳定的 项目名.vercel.app。".into());
+            } else if !reachable && url.contains(".vercel.app") {
+                suggestions.push("超时/打不开可能是网络波动；Vercel 官方说明国内访问不保证速度，可稍后重试或换网络。".into());
+            }
+
+            UrlProbeResult {
+                url: url.into(),
+                reachable,
+                status_code: Some(status),
+                latency_ms: Some(latency_ms),
+                final_url: Some(final_url),
+                looks_like_login_page: looks_like_login,
+                message,
+                suggestions,
+            }
+        }
+        Err(e) => {
+            if url.contains(".vercel.app") {
+                suggestions.push("部署刚完成时可能需等 1–2 分钟；若持续失败请点「诊断」确认是否误用了临时链接。".into());
+            }
+            UrlProbeResult {
+                url: url.into(),
+                reachable: false,
+                status_code: None,
+                latency_ms: None,
+                final_url: None,
+                looks_like_login_page: false,
+                message: format!("无法连接: {e}"),
+                suggestions,
+            }
+        }
+    }
+}

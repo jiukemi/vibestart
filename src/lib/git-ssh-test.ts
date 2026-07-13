@@ -11,12 +11,12 @@ export interface GitSshTestInterpretation {
 
 export function interpretGitSshTest(
   raw: string,
-  provider: "gitee" | "github",
+  provider: "github" | "gitee",
 ): GitSshTestInterpretation {
   const detail = stripAnsi(raw).trim();
   const lower = detail.toLowerCase();
 
-  if (lower.includes("successfully authenticated")) {
+  if (lower.includes("successfully authenticated") || lower.includes("welcome to gitlab")) {
     const host = provider === "gitee" ? "Gitee" : "GitHub";
     return {
       success: true,

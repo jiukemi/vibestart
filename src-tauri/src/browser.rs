@@ -116,6 +116,8 @@ const EXTERNAL_REQUIRED: &[&str] = &[
 /// 国内可访问、向导内优先应用内打开（保留 Cookie / 少切窗口）
 const IN_APP_PREFERRED: &[&str] = &[
     "gitee.com",
+    "jihulab.com",
+    "gitlab.cn",
     "deepseek.com",
     "platform.deepseek.com",
     "dashscope.aliyuncs.com",

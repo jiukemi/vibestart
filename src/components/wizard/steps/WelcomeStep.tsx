@@ -48,8 +48,8 @@ const INTENTS: {
     icon: Upload,
     bullets: [
       "选已有项目文件夹（需含 index.html）",
-      "默认 Gitee Pages，国内访问更稳",
-      "也可改选 Vercel",
+      "默认腾讯云网页托管，国内一键部署（预览约 3h，长期需自定义域名）",
+      "也可选 Cloudflare / GitHub / Vercel",
       "约 3 步完成",
     ],
   },
@@ -69,7 +69,7 @@ const TRACKS: {
     icon: Rocket,
     bullets: [
       "准备环境 + 确认 AI 编辑器（Cursor / Claude Code）",
-      "跳过 Git 配置，默认 DeepSeek + Vercel",
+      "跳过 Git 配置，默认腾讯云网页托管 + DeepSeek",
       "约 6 步走完",
     ],
   },
@@ -80,7 +80,7 @@ const TRACKS: {
     icon: Route,
     bullets: [
       "自选 AI 编辑器与 LLM",
-      "可选 Gitee / GitHub 与 Pages",
+      "可选 GitHub 托管与 Pages（纯外网）",
       "适合小程序 / App 方向",
     ],
   },
@@ -154,7 +154,7 @@ export function WelcomeStep() {
           </div>
           {deployOnly && (
             <p className="mt-2 text-xs text-muted-foreground">
-              部署轨约 {visibleSteps} 步；跳过环境安装与 AI 配置，默认使用 Gitee Pages（国内推荐）。
+              部署轨约 {visibleSteps} 步；跳过环境安装与 AI 配置，默认使用腾讯云网页托管（国内推荐）。
             </p>
           )}
         </div>

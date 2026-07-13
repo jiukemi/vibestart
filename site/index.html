@@ -15,7 +15,7 @@
       href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/style.css?v=7" />
+    <link rel="stylesheet" href="css/style.css?v=8" />
   </head>
   <body>
     <div class="bg-mesh" aria-hidden="true"></div>
@@ -98,9 +98,10 @@
 
         <div class="mirror-toggle" role="group" aria-label="下载线路">
           <button type="button" class="mirror-chip" data-mirror="auto" aria-pressed="true">自动选线</button>
+          <button type="button" class="mirror-chip" data-mirror="gitee" aria-pressed="false">Gitee（国内）</button>
           <button type="button" class="mirror-chip" data-mirror="github" aria-pressed="false">GitHub</button>
-          <button type="button" class="mirror-chip" data-mirror="gitee" aria-pressed="false">Gitee</button>
         </div>
+        <p id="mirror-hint" class="mirror-hint" data-visible="false"></p>
 
         <div class="download-row">
           <a id="download-btn" class="btn-download" href="#" rel="noopener">
@@ -147,7 +148,7 @@
       </footer>
     </div>
 
-    <script src="js/config.js?v=7"></script>
-    <script src="js/main.js?v=7"></script>
+    <script src="js/config.js?v=8"></script>
+    <script src="js/main.js?v=8"></script>
   </body>
 </html>

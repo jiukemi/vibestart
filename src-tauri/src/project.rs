@@ -689,33 +689,12 @@ pub fn open_local_preview(project_dir: &str) -> Result<(), String> {
 }
 
 pub fn vercel_login() -> Result<String, String> {
-    #[cfg(target_os = "macos")]
-    {
-        let _ = std::process::Command::new("open")
-            .arg("https://vercel.com/login")
-            .status();
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let _ = crate::tools_install::new_subprocess("cmd")
-            .args(["/C", "start", "", "https://vercel.com/login"])
-            .status();
-    }
-
-    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-    {
-        let _ = std::process::Command::new("xdg-open")
-            .arg("https://vercel.com/login")
-            .status();
-    }
-
-    launch_vercel_login_terminal()
+    launch_vercel_login_flow()
 }
 
-fn launch_vercel_login_terminal() -> Result<String, String> {
+fn launch_vercel_login_flow() -> Result<String, String> {
     let cmd_path = resolve_command_path("vercel").ok_or_else(|| {
-        "未找到 vercel 命令。请先在「安装工具」步骤安装 Node.js，并运行 npm i -g vercel。".to_string()
+        "未找到 vercel 命令。请先在部署步骤安装 Vercel CLI。".to_string()
     })?;
 
     #[cfg(target_os = "macos")]
@@ -727,13 +706,151 @@ fn launch_vercel_login_terminal() -> Result<String, String> {
              echo \"  VibeStart · Vercel 登录\"\n\
              echo \"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\"\n\
              echo \"\"\n\
-             echo \"  1) 已在系统浏览器打开 vercel.com/login（可在此注册/登录）\"\n\
-             echo \"  2) 下方 CLI 会打开授权页，按提示完成 OAuth\"\n\
-             echo \"  3) 登录成功后回到 VibeStart 点击「开始部署」\"\n\
+             echo \"  1. 浏览器会由 CLI 自动打开，点 Allow 完成授权\"\n\
+             echo \"  2. 不要关此窗口，等到终端显示 Logged in\"\n\
+             echo \"  3. 接着会进入账号选择 — 选 Personal / 你的用户名 (Hobby)\"\n\
+             echo \"  4. 不要选 Pro Team / 公司名称\"\n\
              echo \"\"\n\
              \"{escaped}\" login || {{\n\
                echo \"\"\n\
                echo \"登录未完成。请确认网络可访问 vercel.com\"\n\
+               echo \"按 Enter 关闭…\"\n\
+               read\n\
+               exit 1\n\
+             }}\n\
+             echo \"\"\n\
+             echo \"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\"\n\
+             echo \"  下一步：选择 Personal（个人 Hobby 账号）\"\n\
+             echo \"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\"\n\
+             echo \"\"\n\
+             \"{escaped}\" teams switch || true\n\
+             echo \"\"\n\
+             \"{escaped}\" whoami\n\
+             echo \"\"\n\
+             echo \"完成。回到 VibeStart 会自动检测登录状态。\"\n\
+             echo \"按 Enter 关闭此窗口…\"\n\
+             read\n"
+        );
+        let script_path = std::env::temp_dir().join("vibestart-vercel-login.command");
+        std::fs::write(&script_path, script).map_err(|e| format!("无法写入启动脚本: {e}"))?;
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&script_path)
+            .map_err(|e| e.to_string())?
+            .permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script_path, perms).map_err(|e| e.to_string())?;
+        std::process::Command::new("open")
+            .arg(&script_path)
+            .status()
+            .map_err(|e| format!("无法打开 Terminal: {e}"))?;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let script = format!(
+            "@echo off\r\n\
+             chcp 65001 >nul\r\n\
+             echo VibeStart - Vercel 登录\r\n\
+             echo.\r\n\
+             echo 1. 浏览器会由 CLI 自动打开，点 Allow 完成授权\r\n\
+             echo 2. 不要关此窗口，等到终端显示 Logged in\r\n\
+             echo 3. 接着会进入账号选择 — 选 Personal / 你的用户名 ^(Hobby^)\r\n\
+             echo 4. 不要选 Pro Team / 公司名称\r\n\
+             echo.\r\n\
+             \"{cmd_path}\" login\r\n\
+             if errorlevel 1 (\r\n\
+               echo.\r\n\
+               echo 登录未完成。请确认网络可访问 vercel.com\r\n\
+               pause\r\n\
+               exit /b 1\r\n\
+             )\r\n\
+             echo.\r\n\
+             echo ========================================\r\n\
+             echo  下一步：选择 Personal ^(个人 Hobby 账号^)\r\n\
+             echo ========================================\r\n\
+             echo  用方向键选你的个人用户名，不要选 Pro Team\r\n\
+             echo.\r\n\
+             \"{cmd_path}\" teams switch\r\n\
+             echo.\r\n\
+             \"{cmd_path}\" whoami\r\n\
+             echo.\r\n\
+             echo 完成。回到 VibeStart 会自动检测登录状态。\r\n\
+             pause\r\n"
+        );
+        let script_path = std::env::temp_dir().join("vibestart-vercel-login.cmd");
+        std::fs::write(&script_path, script).map_err(|e| format!("无法写入脚本: {e}"))?;
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", "cmd", "/k", &script_path.to_string_lossy()])
+            .spawn()
+            .map_err(|e| format!("无法打开命令行: {e}"))?;
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let mut cmd = std::process::Command::new(&cmd_path);
+        cmd.arg("login").spawn().map_err(|e| format!("无法启动 vercel: {e}"))?;
+    }
+
+    Ok(
+        "已在 cmd 窗口启动 Vercel 登录流程。\n\n\
+         1. 浏览器点 Allow 后不要关 cmd，等到显示 Logged in\n\
+         2. 接着在列表里选 Personal / 你的用户名 (Hobby)\n\
+         3. 完成后 VibeStart 会自动检测，也可点「重新检测」"
+            .into(),
+    )
+}
+
+pub fn vercel_teams_switch() -> Result<String, String> {
+    launch_vercel_interactive(
+        &["teams", "switch"],
+        "切换 Vercel 账号",
+        &[
+            "在列表里选你的个人用户名（Hobby / Personal）",
+            "不要选公司 Pro Team",
+            "选好后回到 VibeStart 点「重新检测」",
+        ],
+        "已在 cmd 窗口启动 vercel teams switch。\n\n\
+         在列表中选择你的个人用户名（Hobby），不要选 Pro Team。",
+    )
+}
+
+fn launch_vercel_interactive(
+    args: &[&str],
+    title: &str,
+    hint_lines: &[&str],
+    success_message: &str,
+) -> Result<String, String> {
+    let cmd_path = resolve_command_path("vercel").ok_or_else(|| {
+        "未找到 vercel 命令。请先在部署步骤安装 Vercel CLI。".to_string()
+    })?;
+
+    let vercel_invoke = {
+        let mut parts = vec![format!("\"{cmd_path}\"")];
+        for arg in args {
+            parts.push(arg.to_string());
+        }
+        parts.join(" ")
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        let mut hint_block = String::new();
+        for (i, line) in hint_lines.iter().enumerate() {
+            hint_block.push_str(&format!("echo \"  {}. {line}\"\n", i + 1));
+        }
+        let args_str = args.join(" ");
+        let escaped_path = cmd_path.replace('\\', "\\\\").replace('"', "\\\"");
+        let script = format!(
+            "#!/bin/zsh\n\
+             echo \"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\"\n\
+             echo \"  VibeStart · {title}\"\n\
+             echo \"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\"\n\
+             echo \"\"\n\
+             {hint_block}\
+             echo \"\"\n\
+             \"{escaped_path}\" {args_str} || {{\n\
+               echo \"\"\n\
+               echo \"操作未完成。请确认网络可访问 vercel.com\"\n\
                echo \"按 Enter 关闭…\"\n\
                read\n\
              }}\n\
@@ -742,7 +859,10 @@ fn launch_vercel_login_terminal() -> Result<String, String> {
              read\n"
         );
 
-        let script_path = std::env::temp_dir().join("vibestart-vercel-login.command");
+        let script_path = std::env::temp_dir().join(format!(
+            "vibestart-vercel-{}.command",
+            args.join("-").replace(' ', "-")
+        ));
         std::fs::write(&script_path, script).map_err(|e| format!("无法写入启动脚本: {e}"))?;
         #[cfg(unix)]
         {
@@ -757,7 +877,121 @@ fn launch_vercel_login_terminal() -> Result<String, String> {
             .arg(&script_path)
             .status()
             .map_err(|e| format!("无法打开 Terminal: {e}"))?;
-        return Ok("已在系统浏览器打开 Vercel 登录页，并在终端启动 vercel login。请按终端提示完成授权。".into());
+        return Ok(success_message.to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut echo_hints = String::new();
+        for (i, line) in hint_lines.iter().enumerate() {
+            let escaped = line.replace('^', "^^");
+            echo_hints.push_str(&format!("echo {}. {escaped}\r\n", i + 1));
+        }
+        let script = format!(
+            "@echo off\r\n\
+             chcp 65001 >nul\r\n\
+             echo VibeStart - {title}\r\n\
+             echo.\r\n\
+             {echo_hints}\
+             echo.\r\n\
+             {vercel_invoke}\r\n\
+             echo.\r\n\
+             echo 完成。可关闭此窗口，回到 VibeStart 点「重新检测」。\r\n\
+             pause\r\n"
+        );
+        let script_path = std::env::temp_dir().join(format!(
+            "vibestart-vercel-{}.cmd",
+            args.join("-").replace(' ', "-")
+        ));
+        std::fs::write(&script_path, script).map_err(|e| format!("无法写入脚本: {e}"))?;
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", "cmd", "/k", &script_path.to_string_lossy()])
+            .spawn()
+            .map_err(|e| format!("无法打开命令行: {e}"))?;
+        return Ok(success_message.to_string());
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let mut cmd = std::process::Command::new(&cmd_path);
+        cmd.args(args).spawn().map_err(|e| format!("无法启动 vercel: {e}"))?;
+        return Ok(success_message.to_string());
+    }
+
+    #[allow(unreachable_code)]
+    Ok(String::new())
+}
+
+pub fn wrangler_login() -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open")
+            .arg("https://dash.cloudflare.com/login")
+            .status();
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let _ = crate::tools_install::new_subprocess("cmd")
+            .args(["/C", "start", "", "https://dash.cloudflare.com/login"])
+            .status();
+    }
+
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    {
+        let _ = std::process::Command::new("xdg-open")
+            .arg("https://dash.cloudflare.com/login")
+            .status();
+    }
+
+    launch_wrangler_login_terminal()
+}
+
+fn launch_wrangler_login_terminal() -> Result<String, String> {
+    let cmd_path = resolve_command_path("wrangler").ok_or_else(|| {
+        "未找到 wrangler 命令。请先在部署步骤安装 Wrangler CLI（npm i -g wrangler）。".to_string()
+    })?;
+
+    #[cfg(target_os = "macos")]
+    {
+        let escaped = cmd_path.replace('\\', "\\\\").replace('"', "\\\"");
+        let script = format!(
+            "#!/bin/zsh\n\
+             echo \"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\"\n\
+             echo \"  VibeStart · Cloudflare 登录\"\n\
+             echo \"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\"\n\
+             echo \"\"\n\
+             echo \"  1) 已在系统浏览器打开 Cloudflare 登录页\"\n\
+             echo \"  2) 下方 CLI 会打开授权页，按提示完成 OAuth\"\n\
+             echo \"  3) 登录成功后回到 VibeStart 点击「开始部署」\"\n\
+             echo \"\"\n\
+             \"{escaped}\" login || {{\n\
+               echo \"\"\n\
+               echo \"登录未完成。请确认网络可访问 cloudflare.com\"\n\
+               echo \"按 Enter 关闭…\"\n\
+               read\n\
+             }}\n\
+             echo \"\"\n\
+             echo \"完成。按 Enter 关闭此窗口…\"\n\
+             read\n"
+        );
+
+        let script_path = std::env::temp_dir().join("vibestart-wrangler-login.command");
+        std::fs::write(&script_path, script).map_err(|e| format!("无法写入启动脚本: {e}"))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&script_path)
+                .map_err(|e| e.to_string())?
+                .permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&script_path, perms).map_err(|e| e.to_string())?;
+        }
+        std::process::Command::new("open")
+            .arg(&script_path)
+            .status()
+            .map_err(|e| format!("无法打开 Terminal: {e}"))?;
+        return Ok("已在系统浏览器打开 Cloudflare 登录页，并在终端启动 wrangler login。请按终端提示完成授权。".into());
     }
 
     #[cfg(target_os = "windows")]
@@ -766,7 +1000,7 @@ fn launch_vercel_login_terminal() -> Result<String, String> {
             .args(["/C", "start", "cmd", "/k", &format!("\"{cmd_path}\" login")])
             .spawn()
             .map_err(|e| format!("无法打开命令行: {e}"))?;
-        return Ok("已在系统浏览器打开 Vercel 登录页，并在新命令行窗口启动 vercel login。".into());
+        return Ok("已在系统浏览器打开 Cloudflare 登录页，并在新命令行窗口启动 wrangler login。".into());
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -774,8 +1008,8 @@ fn launch_vercel_login_terminal() -> Result<String, String> {
         std::process::Command::new(&cmd_path)
             .arg("login")
             .spawn()
-            .map_err(|e| format!("无法启动 vercel login: {e}"))?;
-        return Ok("已在系统浏览器打开 Vercel 登录页，并启动 vercel login。".into());
+            .map_err(|e| format!("无法启动 wrangler login: {e}"))?;
+        return Ok("已在系统浏览器打开 Cloudflare 登录页，并启动 wrangler login。".into());
     }
 
     #[allow(unreachable_code)]

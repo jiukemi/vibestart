@@ -47,6 +47,8 @@ pub fn scan_all() -> Vec<ToolStatus> {
         "cc-switch",
         "tongyi-lingma",
         "vercel",
+        "edgeone",
+        "wrangler",
         "flutter",
         "wechat-devtools",
         "xcode",
@@ -76,6 +78,8 @@ fn scan_one(name: &str) -> ToolStatus {
         "cc-switch" => scan_cc_switch(),
         "tongyi-lingma" => scan_tongyi_lingma(),
         "vercel" => scan_command("vercel", &["--version"], |s| s.trim().to_string()),
+        "edgeone" => scan_command("edgeone", &["--version"], |s| s.trim().to_string()),
+        "wrangler" => scan_command("wrangler", &["--version"], |s| s.trim().to_string()),
         "flutter" => scan_command("flutter", &["--version"], |s| {
             s.lines().next().unwrap_or(s).trim().to_string()
         }),

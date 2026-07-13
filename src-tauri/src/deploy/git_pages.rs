@@ -94,6 +94,7 @@ pub fn deploy_git_pages(config: GitPagesDeployConfig<'_>) -> DeployResult {
                 return DeployResult {
                     success: false,
                     url: None,
+                    alt_urls: vec![],
                     log: format!(
                         "{log}\n❌ 部署在「{label}」步骤未成功。\n\n{}",
                         failure_hint(&step, &combined, host)
@@ -104,6 +105,7 @@ pub fn deploy_git_pages(config: GitPagesDeployConfig<'_>) -> DeployResult {
                 return DeployResult {
                     success: false,
                     url: None,
+                    alt_urls: vec![],
                     log: format!("{log}❌ {label} 执行失败: {e}"),
                 };
             }
@@ -114,6 +116,7 @@ pub fn deploy_git_pages(config: GitPagesDeployConfig<'_>) -> DeployResult {
     DeployResult {
         success: true,
         url: Some(pages_url),
+        alt_urls: vec![],
         log,
     }
 }
@@ -128,6 +131,7 @@ fn prepare_deploy(
         return Err(DeployResult {
             success: false,
             url: None,
+                alt_urls: vec![],
                 log: format!(
                     "{log}❌ 未检测到 Git。\n\n\
                      请返回「准备环境」步骤，点击「一键安装 Git」，安装完成后再来部署。"
@@ -144,6 +148,7 @@ fn prepare_deploy(
             return Err(DeployResult {
                 success: false,
                 url: None,
+                alt_urls: vec![],
                 log: format!(
                     "{log}❌ 无法读取 SSH 公钥。\n\n\
                      请在本页点击「一键生成 SSH 密钥」，然后「复制 SSH 公钥」粘贴到 Gitee/GitHub 账户后再部署。"
@@ -154,6 +159,7 @@ fn prepare_deploy(
             return Err(DeployResult {
                 success: false,
                 url: None,
+                alt_urls: vec![],
                 log: format!(
                     "{log}❌ 无法生成 SSH 密钥：{e}\n\n\
                      请在本页点击「一键生成 SSH 密钥」后重试。"
@@ -177,6 +183,7 @@ fn ensure_local_git_identity(
         let out = run_git(project_dir, &["config", key, value]).map_err(|e| DeployResult {
             success: false,
             url: None,
+            alt_urls: vec![],
             log: format!("无法配置 Git 身份: {e}"),
         })?;
         if !out.status.success() {
@@ -188,6 +195,7 @@ fn ensure_local_git_identity(
             return Err(DeployResult {
                 success: false,
                 url: None,
+                alt_urls: vec![],
                 log: format!("无法配置 Git 身份（{key}）: {detail}"),
             });
         }

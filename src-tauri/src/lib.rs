@@ -23,7 +23,7 @@ use deploy::DeployResult;
 use env_scan::ToolStatus;
 use installer::CommandResult;
 use llm::LlmTestResult;
-use network::{GithubConnectivity, NetworkStatus};
+use network::{GithubConnectivity, NetworkStatus, UrlProbeResult};
 use os::OsInfo;
 use ssh::SshKeyInfo;
 use tauri::AppHandle;
@@ -113,6 +113,11 @@ fn validate_project(project_dir: String) -> Result<(), String> {
 #[tauri::command]
 fn deploy_vercel(project_dir: String) -> DeployResult {
     deploy::deploy_vercel(&project_dir)
+}
+
+#[tauri::command]
+fn vercel_account() -> Result<deploy::VercelAccountInfo, String> {
+    deploy::vercel_account()
 }
 
 #[tauri::command]
@@ -239,6 +244,26 @@ fn vercel_login() -> Result<String, String> {
 }
 
 #[tauri::command]
+fn vercel_teams_switch() -> Result<String, String> {
+    project::vercel_teams_switch()
+}
+
+#[tauri::command]
+fn vercel_whoami() -> Result<String, String> {
+    deploy::vercel_whoami()
+}
+
+#[tauri::command]
+fn vercel_logout() -> Result<String, String> {
+    deploy::vercel_logout()
+}
+
+#[tauri::command]
+fn wrangler_login() -> Result<String, String> {
+    project::wrangler_login()
+}
+
+#[tauri::command]
 async fn test_llm_api(
     provider: String,
     api_key: String,
@@ -259,6 +284,39 @@ fn sync_llm_to_ides(
 #[tauri::command]
 fn get_llm_config() -> Option<LlmConfig> {
     llm::get_llm_config()
+}
+
+#[tauri::command]
+fn deploy_edgeone_pages(
+    project_dir: String,
+    project_name: String,
+    api_token: String,
+) -> DeployResult {
+    deploy::deploy_edgeone_pages(&project_dir, &project_name, &api_token)
+}
+
+#[tauri::command]
+fn refresh_edgeone_preview_url(
+    project_dir: String,
+    project_name: String,
+    api_token: String,
+) -> DeployResult {
+    deploy::refresh_edgeone_preview_url(&project_dir, &project_name, &api_token)
+}
+
+#[tauri::command]
+fn deploy_cloudflare_pages(
+    project_dir: String,
+    project_name: String,
+    api_token: Option<String>,
+    account_id: Option<String>,
+) -> DeployResult {
+    deploy::deploy_cloudflare_pages(
+        &project_dir,
+        &project_name,
+        api_token.as_deref(),
+        account_id.as_deref(),
+    )
 }
 
 #[tauri::command]
@@ -326,6 +384,11 @@ fn save_browser_config(preset: String) -> Result<(), String> {
 #[tauri::command]
 fn get_network_status() -> NetworkStatus {
     network::get_network_status()
+}
+
+#[tauri::command]
+fn probe_deploy_url(url: String) -> UrlProbeResult {
+    network::probe_deploy_url(&url)
 }
 
 #[tauri::command]
@@ -440,6 +503,9 @@ pub fn run() {
             validate_project,
             deploy_vercel,
             deploy_github_pages,
+            deploy_edgeone_pages,
+            refresh_edgeone_preview_url,
+            deploy_cloudflare_pages,
             deploy_gitee_pages,
             init_project,
             home_directory,
@@ -457,6 +523,11 @@ pub fn run() {
             open_in_cursor,
             open_local_preview,
             vercel_login,
+            vercel_account,
+            vercel_teams_switch,
+            vercel_whoami,
+            vercel_logout,
+            wrangler_login,
             test_llm_api,
             sync_llm_to_ides,
             verify_ide_sync,
@@ -473,6 +544,7 @@ pub fn run() {
             save_browser_config,
             get_network_status,
             test_github_connectivity,
+            probe_deploy_url,
             apply_github_network,
             use_detected_proxy,
             save_network_config,
