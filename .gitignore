@@ -17,6 +17,7 @@ lerna-debug.log*
 .env
 .env.*
 !.env.example
+cookies.txt
 *.pem
 *.key
 *.p12
