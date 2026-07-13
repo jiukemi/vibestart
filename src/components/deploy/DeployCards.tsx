@@ -290,7 +290,7 @@ export function DeployCards({
                   "external",
                 ).then(() =>
                   setBrowserHint(
-                    "已打开 API Tokens 页。Create Token → Custom token → Account/Pages/Edit + User/Memberships/Read。",
+                    "已打开 API Tokens 页。Create Token → Custom token → Account/Pages/Edit + User/User Details/Read。",
                   ),
                 )
               }
@@ -617,6 +617,10 @@ function CloudflarePanel({
             <p className="text-sm text-muted-foreground">
               已填写 API Token。请同时填写 Account ID（可粘贴控制台链接，自动识别）。
             </p>
+            <p className="text-xs text-muted-foreground">
+              部署时会自动退出本机 wrangler 旧登录，并隔离 pages.json 账号缓存（同一台电脑测多个账号时 Wrangler 会沿用旧 ID）。
+              若改用 OAuth 登录，请先清空 API Token。
+            </p>
             <CloudflarePagesTokenGuide
               compact
               browserLoading={browserLoading}
@@ -624,15 +628,6 @@ function CloudflarePanel({
               onOpenApiTokens={onOpenApiTokens}
               onOpenPagesOverview={onOpenPagesOverview}
             />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={cloudflareLoginLoading}
-              onClick={onCloudflareLogin}
-            >
-              {cloudflareLoginLoading ? "启动中…" : "Cloudflare 登录（免填 Token）"}
-            </Button>
           </>
         )}
         {browserHint && (
@@ -676,7 +671,7 @@ function CloudflarePanel({
                   applyAccountIdInput(text);
                 }
               }}
-              placeholder="粘贴完整链接或 32 位 ID，如 74ec0fa9... 或 dash.cloudflare.com/…/workers-and-pages"
+              placeholder="粘贴完整链接或 32 位 ID（从 Workers 页地址栏复制，勿用文档示例）"
               className="min-w-[12rem] flex-1 h-9 rounded-lg border border-input bg-background px-3 font-mono text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             />
             <Button
@@ -705,7 +700,7 @@ function CloudflarePanel({
           label="API Token（可选）"
           value={cloudflareApiToken}
           onChange={onCloudflareApiTokenChange}
-          placeholder="Account/Pages/Edit；建议加 Account Settings Read"
+          placeholder="Pages/Edit + User Details/Read；新账号须新建 Token"
         />
         {githubRepoName && (
           <p className="text-xs text-muted-foreground">

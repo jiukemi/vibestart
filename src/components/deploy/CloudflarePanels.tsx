@@ -11,9 +11,9 @@ export const CLOUDFLARE_PAGES_URL = "https://developers.cloudflare.com/pages/";
 export const CLOUDFLARE_API_TOKEN_DOC_URL =
   "https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/#generate-an-api-token";
 
-/** 示例：登录跳转后地址栏形如 https://dash.cloudflare.com/74ec0fa9.../workers-and-pages */
+/** 示例 URL（占位 ID，非真实账号） */
 export const CLOUDFLARE_ACCOUNT_ID_URL_EXAMPLE =
-  "https://dash.cloudflare.com/74ec0fa9f8bd165464ebbe22e95441fe/workers-and-pages";
+  "https://dash.cloudflare.com/1234567890abcdef1234567890abcdef/workers-and-pages";
 
 const ACCOUNT_ID_RE = /^[a-f0-9]{32}$/i;
 

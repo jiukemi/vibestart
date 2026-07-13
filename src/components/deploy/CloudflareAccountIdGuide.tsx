@@ -26,7 +26,7 @@ export function CloudflareAccountIdGuide() {
         </pre>
         <p>
           <strong className="text-foreground">步骤 3</strong>：复制整段链接粘贴到 Account ID 输入框，或只复制中间
-          32 位（如 <code className="text-[11px]">74ec0fa9f8bd165464ebbe22e95441fe</code>
+          32 位（如 <code className="text-[11px]">1234567890abcdef1234567890abcdef</code>
           ）。也可点「从剪贴板粘贴」。
         </p>
       </div>

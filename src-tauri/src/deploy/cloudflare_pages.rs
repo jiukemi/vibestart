@@ -1,10 +1,12 @@
 use super::DeployResult;
 use crate::tools_install;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 struct WranglerAuth<'a> {
     token: Option<&'a str>,
     account_id: Option<String>,
+    project_name: Option<&'a str>,
 }
 
 pub fn deploy_cloudflare_pages(
@@ -56,11 +58,83 @@ pub fn deploy_cloudflare_pages(
     let auth = WranglerAuth {
         token,
         account_id: resolved_account_id.clone(),
+        project_name: Some(name),
     };
 
     let branch = "main";
     let mut full_log = String::from("【Cloudflare Pages 部署】\n\n");
-    full_log.push_str(&ensure_pages_project(name, branch, project_dir, &auth));
+
+    if token.is_some() {
+        match clear_wrangler_oauth_session(project_dir) {
+            Ok(cleared) if cleared => {
+                full_log.push_str(
+                    "ℹ️ 已退出本机 wrangler 旧登录（OAuth），避免与 API Token 混用导致认证失败。\n\n",
+                );
+            }
+            Ok(_) => {}
+            Err(e) => {
+                full_log.push_str(&format!(
+                    "⚠️ 未能退出 wrangler 旧登录：{e}\n若部署报 code 10000，请在本机终端手动执行 wrangler logout 后重试。\n\n",
+                ));
+            }
+        }
+        if let Some(ref id) = resolved_account_id {
+            full_log.push_str(&format!(
+                "ℹ️ 已隔离 wrangler 账号缓存，强制使用 Account ID: {id}\n\n",
+            ));
+        }
+        if let Some(ref id) = resolved_account_id {
+            match verify_token_matches_account(&auth, id, project_dir) {
+                Ok(TokenPreflight::Verified) => {}
+                Ok(TokenPreflight::Skipped(note)) => {
+                    full_log.push_str(&format!("ℹ️ {note}\n\n"));
+                }
+                Err(msg) => {
+                    full_log.push_str(&format!("❌ {msg}\n\n"));
+                    full_log.push_str(&cloudflare_token_auth_hint());
+                    return DeployResult {
+                        success: false,
+                        url: None,
+                        alt_urls: vec![],
+                        log: full_log,
+                    };
+                }
+            }
+        }
+    }
+
+    match ensure_pages_project(name, branch, project_dir, &auth) {
+        EnsureProjectResult::Created(msg) | EnsureProjectResult::AlreadyExists(msg) => {
+            full_log.push_str(&msg);
+        }
+        EnsureProjectResult::AuthFailed { log } => {
+            if let Some(ref id) = resolved_account_id {
+                full_log.push_str(&format!("\n（已使用 Account ID: {id}）\n"));
+                if let Some(used) = extract_account_id_from_wrangler_api_log(&log) {
+                    if used != *id {
+                        full_log.push_str(&format!(
+                            "\n⚠️ Wrangler 实际请求了旧账号 {used}（可能来自 pages.json 缓存）。\
+                             已尝试隔离缓存；若仍出现此 ID，说明 API Token 属于该旧账号，\
+                             请在新账号控制台重新 Create Token。\n",
+                        ));
+                    }
+                }
+            }
+            full_log.push_str(&format!(
+                "❌ Cloudflare API Token 认证失败，无法创建 Pages 项目。\n\n{log}\n{}",
+                cloudflare_token_auth_hint()
+            ));
+            return DeployResult {
+                success: false,
+                url: None,
+                alt_urls: vec![],
+                log: full_log,
+            };
+        }
+        EnsureProjectResult::Failed(msg) => {
+            full_log.push_str(&msg);
+        }
+    }
 
     let out = run_wrangler(
         &auth,
@@ -126,14 +200,75 @@ fn build_wrangler_cmd(auth: &WranglerAuth) -> Command {
         tools_install::new_subprocess("wrangler")
     };
     tools_install::apply_tool_runtime_env(&mut cmd);
+    apply_cloudflare_auth(&mut cmd, auth);
+    cmd
+}
+
+/// Wrangler Pages 的 `project create` 会优先读 pages.json 缓存里的 account_id，忽略环境变量。
+/// 使用 API Token 时写入独立 WRANGLER_CACHE_DIR，避免同一台机器测多个账号时沿用旧 ID。
+fn apply_wrangler_isolated_cache(cmd: &mut Command, auth: &WranglerAuth) {
+    let (Some(_), Some(ref account_id), Some(project_name)) =
+        (auth.token, auth.account_id.as_ref(), auth.project_name)
+    else {
+        return;
+    };
+    let cache_dir = wrangler_cache_dir_for_account(account_id);
+    if seed_wrangler_pages_cache(&cache_dir, account_id, project_name).is_ok() {
+        cmd.env("WRANGLER_CACHE_DIR", &cache_dir);
+    }
+}
+
+fn wrangler_cache_dir_for_account(account_id: &str) -> PathBuf {
+    std::env::temp_dir()
+        .join("vibestart-wrangler")
+        .join(account_id)
+}
+
+fn seed_wrangler_pages_cache(
+    cache_dir: &Path,
+    account_id: &str,
+    project_name: &str,
+) -> Result<(), String> {
+    std::fs::create_dir_all(cache_dir)
+        .map_err(|e| format!("无法创建 wrangler 缓存目录：{e}"))?;
+    let payload = serde_json::json!({
+        "account_id": account_id,
+        "project_name": project_name,
+    });
+    let pages_json = cache_dir.join("pages.json");
+    std::fs::write(
+        &pages_json,
+        serde_json::to_string_pretty(&payload).map_err(|e| format!("无法写入 pages.json：{e}"))?,
+    )
+    .map_err(|e| format!("无法写入 pages.json：{e}"))?;
+    Ok(())
+}
+
+/// 使用 API Token 时清除 OAuth/旧密钥环境变量，避免 wrangler 混用导致 10000。
+fn apply_cloudflare_auth(cmd: &mut Command, auth: &WranglerAuth) {
+    for key in [
+        "CLOUDFLARE_API_KEY",
+        "CLOUDFLARE_EMAIL",
+        "CF_API_KEY",
+        "CF_API_EMAIL",
+        "CF_ACCOUNT_ID",
+    ] {
+        cmd.env_remove(key);
+    }
     if let Some(t) = auth.token {
-        cmd.env("CLOUDFLARE_API_TOKEN", t);
+        cmd.env("CLOUDFLARE_API_TOKEN", t.trim());
+        apply_wrangler_isolated_cache(cmd, auth);
+    } else {
+        cmd.env_remove("CLOUDFLARE_API_TOKEN");
+        cmd.env_remove("WRANGLER_CACHE_DIR");
     }
     if let Some(ref id) = auth.account_id {
+        let id = id.trim();
         cmd.env("CLOUDFLARE_ACCOUNT_ID", id);
         cmd.env("CF_ACCOUNT_ID", id);
+    } else {
+        cmd.env_remove("CLOUDFLARE_ACCOUNT_ID");
     }
-    cmd
 }
 
 fn run_wrangler(auth: &WranglerAuth, project_dir: &str, args: &[&str]) -> Result<Output, String> {
@@ -141,6 +276,25 @@ fn run_wrangler(auth: &WranglerAuth, project_dir: &str, args: &[&str]) -> Result
     cmd.args(args).current_dir(project_dir);
     cmd.output()
         .map_err(|e| format!("无法执行 wrangler：{e}"))
+}
+
+/// 使用 API Token 部署前清除 wrangler OAuth 会话，避免与 `CLOUDFLARE_API_TOKEN` 混用。
+fn clear_wrangler_oauth_session(project_dir: &str) -> Result<bool, String> {
+    let auth = WranglerAuth {
+        token: None,
+        account_id: None,
+        project_name: None,
+    };
+    let out = run_wrangler(&auth, project_dir, &["logout"])?;
+    let log = format_wrangler_log(&out);
+    if !out.status.success() {
+        let lower = log.to_lowercase();
+        if lower.contains("not logged in") || lower.contains("already logged out") {
+            return Ok(false);
+        }
+        return Err(log.trim().to_string());
+    }
+    Ok(true)
 }
 
 fn format_wrangler_log(out: &Output) -> String {
@@ -151,12 +305,19 @@ fn format_wrangler_log(out: &Output) -> String {
     )
 }
 
+enum EnsureProjectResult {
+    Created(String),
+    AlreadyExists(String),
+    AuthFailed { log: String },
+    Failed(String),
+}
+
 fn ensure_pages_project(
     name: &str,
     branch: &str,
     project_dir: &str,
     auth: &WranglerAuth,
-) -> String {
+) -> EnsureProjectResult {
     let Ok(out) = run_wrangler(
         auth,
         project_dir,
@@ -169,17 +330,37 @@ fn ensure_pages_project(
             branch,
         ],
     ) else {
-        return String::from("⚠️ 无法执行 wrangler pages project create，将尝试直接部署。\n\n");
+        return EnsureProjectResult::Failed(
+            "⚠️ 无法执行 wrangler pages project create，将尝试直接部署。\n\n".into(),
+        );
     };
 
     let log = format_wrangler_log(&out);
     if out.status.success() {
-        return format!("✅ 已创建 Pages 项目「{name}」。\n{log}\n\n");
+        return EnsureProjectResult::Created(format!(
+            "✅ 已创建 Pages 项目「{name}」。\n{log}\n\n"
+        ));
     }
     if pages_project_already_exists(&log) {
-        return format!("ℹ️ Pages 项目「{name}」已存在，继续部署。\n\n");
+        return EnsureProjectResult::AlreadyExists(format!(
+            "ℹ️ Pages 项目「{name}」已存在，继续部署。\n\n"
+        ));
     }
-    format!("⚠️ 创建 Pages 项目未成功（将尝试直接部署）：\n{log}\n\n")
+    if is_cloudflare_auth_error(&log) {
+        return EnsureProjectResult::AuthFailed { log };
+    }
+    EnsureProjectResult::Failed(format!(
+        "⚠️ 创建 Pages 项目未成功（将尝试直接部署）：\n{log}\n\n"
+    ))
+}
+
+fn is_cloudflare_auth_error(log: &str) -> bool {
+    let lower = log.to_lowercase();
+    lower.contains("authentication error")
+        || lower.contains("code: 10000")
+        || lower.contains("code: 10001")
+        || lower.contains("incorrect permissions on your api token")
+        || lower.contains("please ensure it has the correct permissions")
 }
 
 fn pages_project_already_exists(log: &str) -> bool {
@@ -199,6 +380,7 @@ fn lookup_cloudflare_account_via_wrangler(api_token: Option<&str>) -> Result<Str
     let auth = WranglerAuth {
         token: api_token.filter(|t| !t.trim().is_empty()).map(str::trim),
         account_id: None,
+        project_name: None,
     };
     let out = run_wrangler(&auth, ".", &["whoami"])?;
 
@@ -213,25 +395,7 @@ fn lookup_cloudflare_account_via_wrangler(api_token: Option<&str>) -> Result<Str
 }
 
 fn extract_account_id_from_whoami(log: &str) -> Result<String, String> {
-    let mut found: Vec<String> = Vec::new();
-    for line in log.lines() {
-        if line.contains('|') {
-            for part in line.split('|').skip(1) {
-                let candidate = part.trim();
-                if is_cloudflare_account_id(candidate) {
-                    found.push(candidate.to_lowercase());
-                }
-            }
-        }
-        for word in line.split_whitespace() {
-            let w = word.trim_matches(|c: char| "|├─└─│".contains(c));
-            if is_cloudflare_account_id(w) {
-                found.push(w.to_lowercase());
-            }
-        }
-    }
-    found.sort();
-    found.dedup();
+    let found = extract_all_account_ids_from_whoami(log);
     match found.len() {
         0 => Err("whoami 输出中未找到 32 位 Account ID。".into()),
         1 => Ok(found[0].clone()),
@@ -240,6 +404,114 @@ fn extract_account_id_from_whoami(log: &str) -> Result<String, String> {
             found.join("\n  · ")
         )),
     }
+}
+
+fn extract_all_account_ids_from_whoami(log: &str) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    for line in log.lines() {
+        if line.contains('|') {
+            for part in line.split('|').skip(1) {
+                let candidate = part.trim();
+                if is_cloudflare_account_id(candidate) {
+                    found.push(candidate.to_ascii_lowercase());
+                }
+            }
+        }
+        for word in line.split_whitespace() {
+            let w = word.trim_matches(|c: char| "|├─└─│".contains(c));
+            if is_cloudflare_account_id(w) {
+                found.push(w.to_ascii_lowercase());
+            }
+        }
+    }
+    found.sort();
+    found.dedup();
+    found
+}
+
+enum TokenPreflight {
+    Verified,
+    Skipped(String),
+}
+
+fn is_wrangler_whoami_skippable(log: &str) -> bool {
+    let lower = log.to_lowercase();
+    lower.contains("retrieve account ids")
+        || lower.contains("/memberships")
+        || lower.contains("failed to automatically retrieve account")
+        || lower.contains("incorrect permissions on your api token")
+        || lower.contains("please ensure it has the correct permissions")
+}
+
+fn verify_token_matches_account(
+    auth: &WranglerAuth,
+    expected_account_id: &str,
+    project_dir: &str,
+) -> Result<TokenPreflight, String> {
+    let out = run_wrangler(auth, project_dir, &["whoami"])?;
+    let log = format_wrangler_log(&out);
+    if !out.status.success() {
+        if is_wrangler_whoami_skippable(&log) {
+            return Ok(TokenPreflight::Skipped(
+                "wrangler whoami 无法列出账号（通常因 Token 未勾选 User Details → Read）。\
+                 已跳过预检，将直接使用您填写的 Account ID 尝试部署。"
+                    .into(),
+            ));
+        }
+        if is_cloudflare_auth_error(&log) {
+            return Err(format!(
+                "API Token 认证失败，wrangler whoami 未通过：\n{}",
+                log.trim()
+            ));
+        }
+        return Ok(TokenPreflight::Skipped(format!(
+            "wrangler whoami 未成功，已跳过预检并继续部署：\n{}",
+            log.trim()
+        )));
+    }
+    let accounts = extract_all_account_ids_from_whoami(&log);
+    if accounts.is_empty() {
+        return Ok(TokenPreflight::Skipped(
+            "wrangler whoami 未返回 Account ID（建议 Token 勾选 User Details → Read）。\
+             已跳过预检，将直接使用您填写的 Account ID 尝试部署。"
+                .into(),
+        ));
+    }
+    let expected = expected_account_id.to_ascii_lowercase();
+    if accounts.iter().any(|id| id == &expected) {
+        return Ok(TokenPreflight::Verified);
+    }
+    Err(format!(
+        "API Token 所属账号为 {}，与您填写的 Account ID {} 不一致。\
+         请在新账号控制台重新 Create Token，或核对 Account ID 是否来自当前登录账号。",
+        accounts.join("、"),
+        expected
+    ))
+}
+
+fn extract_account_id_from_wrangler_api_log(log: &str) -> Option<String> {
+    for word in log.split_whitespace() {
+        if let Some(rest) = word.strip_prefix("/accounts/") {
+            let id = rest.trim_matches(|c: char| !c.is_ascii_hexdigit());
+            if is_cloudflare_account_id(id) {
+                return Some(id.to_ascii_lowercase());
+            }
+        }
+        if word.contains("/accounts/") {
+            if let Some(idx) = word.find("/accounts/") {
+                let rest = &word[idx + "/accounts/".len()..];
+                let id = rest
+                    .split('/')
+                    .next()
+                    .unwrap_or(rest)
+                    .trim_matches(|c: char| !c.is_ascii_hexdigit());
+                if is_cloudflare_account_id(id) {
+                    return Some(id.to_ascii_lowercase());
+                }
+            }
+        }
+    }
+    None
 }
 
 fn is_cloudflare_account_id(s: &str) -> bool {
@@ -302,6 +574,23 @@ fn manual_account_id_hint() -> String {
     )
 }
 
+fn cloudflare_token_auth_hint() -> String {
+    String::from(
+        "🔧 Token 认证失败（code 10000）常见原因\n\
+         1. **新注册账号后用了旧 Token** — 必须重新 Create Token\n\
+         2. **Account ID 与 Token 不是同一账号** — 点「打开 Workers 页」复制当前账号链接里的 32 位 ID\n\
+         3. **Token 权限不足** — Custom token 至少勾选：\n\
+            · Account → Cloudflare Pages → Edit（必填）\n\
+            · User → User Details → Read（建议，用于 whoami 预检；未勾选也可能能部署）\n\
+            · Account Resources → Include → 选你的账号（或 All accounts）\n\
+         4. **Wrangler 缓存旧账号** — 同一台电脑测多个账号时，pages.json 会缓存旧 Account ID；\
+            现已自动隔离缓存。若仍失败，Token 可能属于旧账号，须在新账号重建 Token\n\
+         5. **Token 与 OAuth 混用** — 填 Token 部署时会自动 wrangler logout\n\
+         6. Token 复制时勿带空格；创建后只显示一次，失效需重建\n\n\
+         也可在控制台手动创建 Pages 项目（Workers & Pages → Create → Pages），项目名称与上方填写一致。\n",
+    )
+}
+
 fn cloudflare_deploy_troubleshooting(
     log: &str,
     has_token: bool,
@@ -327,21 +616,29 @@ fn cloudflare_deploy_troubleshooting(
         );
     }
     if lower.contains("not authenticated") || lower.contains("authentication") {
+        if has_token {
+            return format!("\n\n{}", cloudflare_token_auth_hint());
+        }
         return String::from(
             "\n\n🔧 故障排查 — 未认证\n· 点「Cloudflare 登录」完成 wrangler 授权\n· 或填写 API Token + Account ID 后重试\n",
         );
     }
-    if lower.contains("incorrect permissions") || lower.contains("10001") {
-        return String::from(
-            "\n\n🔧 故障排查 — Token 权限不足\n请重建 Token：Account → Cloudflare Pages → Edit，并手动填写 Account ID。\n",
-        );
+    if lower.contains("incorrect permissions") || lower.contains("10001") || lower.contains("10000") {
+        return format!("\n\n{}", cloudflare_token_auth_hint());
     }
     if lower.contains("does not exist") && lower.contains("pages project") {
+        if has_token {
+            return format!(
+                "\n\n🔧 故障排查 — Pages 项目不存在\n\
+                 · 自动创建失败时，请先在控制台 Workers & Pages 手动 Create 同名项目\n\
+                 · 或按下方 Token 说明重建 API Token 后重试\n\n{}",
+                cloudflare_token_auth_hint()
+            );
+        }
         return String::from(
             "\n\n🔧 故障排查 — Pages 项目不存在\n\
-             · 首次部署会自动创建项目；若仍失败，请在 Cloudflare 控制台 Workers & Pages 手动创建同名项目\n\
-             · 确认「项目名称」与控制台中的 Pages 项目名一致\n\
-             · Token 需有 Account → Cloudflare Pages → Edit 权限\n",
+             · 请在 Cloudflare 控制台 Workers & Pages 手动创建同名项目\n\
+             · 确认「项目名称」与控制台中的 Pages 项目名一致\n",
         );
     }
     if has_token {
@@ -443,10 +740,10 @@ Getting User settings...
     #[test]
     fn parses_account_id_from_dashboard_url() {
         let id = parse_cloudflare_account_id(
-            "https://dash.cloudflare.com/74ec0fa9f8bd165464ebbe22e95441fe/workers-and-pages",
+            "https://dash.cloudflare.com/1234567890abcdef1234567890abcdef/workers-and-pages",
         )
         .unwrap();
-        assert_eq!(id, "74ec0fa9f8bd165464ebbe22e95441fe");
+        assert_eq!(id, "1234567890abcdef1234567890abcdef");
     }
 
     #[test]
@@ -477,5 +774,18 @@ Getting User settings...
             "https://fe4c0d9d.vibestart-download-page.pages.dev/",
             "vibestart-download-page"
         ));
+    }
+
+    #[test]
+    fn whoami_memberships_error_is_skippable() {
+        let log = "Failed to automatically retrieve account IDs for the logged in user.";
+        assert!(is_wrangler_whoami_skippable(log));
+    }
+
+    #[test]
+    fn extracts_account_id_from_api_error_log() {
+        let log = r"X [ERROR] A request to the Cloudflare API (/accounts/74ec0fa9f8bd165464ebbe22e95441fe/pages/projects) failed.";
+        let id = extract_account_id_from_wrangler_api_log(log).unwrap();
+        assert_eq!(id, "74ec0fa9f8bd165464ebbe22e95441fe");
     }
 }

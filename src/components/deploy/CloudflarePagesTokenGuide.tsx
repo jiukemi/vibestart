@@ -38,7 +38,7 @@ const SETUP_STEPS = [
   {
     title: "设置 Token 权限",
     detail:
-      "Account → Cloudflare Pages → Edit；Account Resources 选 Include → All accounts。Create Token 后复制到下方。",
+      "Custom token 至少：Account → Cloudflare Pages → Edit；建议加 User → User Details → Read。Account Resources 选 Include → 你的账号（或 All accounts）。",
   },
   {
     title: "创建并复制 Token",
@@ -104,7 +104,7 @@ export function CloudflarePagesTokenGuide({
         <strong className="text-foreground"> CLOUDFLARE_API_TOKEN </strong>
         与
         <strong className="text-foreground"> CLOUDFLARE_ACCOUNT_ID</strong>
-        。仅 Pages → Edit 权限且未填 Account ID 时，常见错误为
+        。新注册账号须重新 Create Token；Account ID 须与 Token 同一账号。仅 Pages → Edit 且未填 Account ID 时，常见错误为
         <code className="mx-1 text-[11px]">Failed to retrieve account IDs</code>
         。
       </p>
