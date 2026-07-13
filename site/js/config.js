@@ -1,13 +1,13 @@
 /** 发版时由 scripts/release.sh 自动同步 version / tag / assets */
 window.VIBESTART_RELEASE = {
-  version: "0.1.8",
-  tag: "v0.1.8",
+  version: "0.1.9",
+  tag: "v0.1.9",
   product: "VibeStart",
   github: { owner: "jiukemi", repo: "vibestart" },
   gitee: { owner: "webhwh", repo: "vibestart" },
   assets: {
-    macArm: "VibeStart_0.1.8_aarch64.dmg",
-    macIntel: "VibeStart_0.1.8_x64.dmg",
-    win: "VibeStart_0.1.8_x64-setup.exe",
+    macArm: "VibeStart_0.1.9_aarch64.dmg",
+    macIntel: "VibeStart_0.1.9_x64.dmg",
+    win: "VibeStart_0.1.9_x64-setup.exe",
   },
 };
